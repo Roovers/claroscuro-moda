@@ -301,7 +301,7 @@ const s = {
   bottomRule: {
     height: 1,
     background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent)',
-    marginBottom: '1.25rem', 
+    marginBottom: '1.25rem',  
   },
   bottomInner: {
     display: 'flex',
