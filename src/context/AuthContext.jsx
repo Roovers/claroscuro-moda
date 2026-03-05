@@ -14,6 +14,8 @@ export const useAuth = () => {
   return context
 }
 
+const ADMIN_EMAIL = 'clarooscurostylee@gmail.com'
+
 export const AuthProvider = ({ children }) => {
   const [usuario, setUsuario] = useState(null)
   const [cargando, setCargando] = useState(true)
@@ -39,7 +41,7 @@ export const AuthProvider = ({ children }) => {
     cargando,
     login,
     logout,
-    esAdmin: !!usuario,
+    esAdmin: (usuario?.email || '').toLowerCase() === ADMIN_EMAIL,
   }
 
   return (
