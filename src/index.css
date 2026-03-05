@@ -63,6 +63,12 @@ img { max-width: 100%; display: block; }
   100% { background-position:  400px 0; }
 }
 
+/* ── NEW: ticker/marquee animation for Home ── */
+@keyframes ticker {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
 .anim-fade-up  { animation: fadeUp  0.6s cubic-bezier(0.4,0,0.2,1) both; }
 .anim-fade-in  { animation: fadeIn  0.5s ease both; }
 .anim-scale-in { animation: scaleIn 0.4s cubic-bezier(0.4,0,0.2,1) both; }
@@ -75,6 +81,9 @@ img { max-width: 100%; display: block; }
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: var(--bg-2); }
 ::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 3px; }
+
+/* Hide scrollbar on slider tracks */
+.slider-no-scroll::-webkit-scrollbar { display: none; }
 
 .skeleton {
   background: linear-gradient(90deg, var(--bg-2) 25%, var(--accent-light) 50%, var(--bg-2) 75%);
