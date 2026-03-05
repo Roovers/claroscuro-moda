@@ -1,11 +1,22 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../../firebase/config'
 import { useAuth } from '../../context/AuthContext'
 import { subirImagenCloudinary } from '../../hooks/useProductos'
-import { AdminSidebar } from './Dashboard'
-import { UploadSimple, X, CheckCircle, Info } from '@phosphor-icons/react'
+import { SignOut, Package, Image as ImageIcon, List, X } from '@phosphor-icons/react'
+
+const useIsMobile = (bp = 768) => {
+  const [v, setV] = useState(() => typeof window !== 'undefined' ? window.innerWidth < bp : false)
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${bp - 1}px)`)
+    const h = (e) => setV(e.matches)
+    mq.addEventListener('change', h)
+    setV(mq.matches)
+    return () => mq.removeEventListener('change', h)
+  }, [bp])
+  return v
+}
 
 const DEFAULTS = {
   heroTitle: 'Una colección minimal, cuidada y atemporal.',
@@ -15,276 +26,180 @@ const DEFAULTS = {
 }
 
 const HomeSettings = () => {
+  const isMobile = useIsMobile()
   const { logout, usuario } = useAuth()
   const navigate = useNavigate()
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const [form, setForm] = useState(DEFAULTS)
   const [cargando, setCargando] = useState(true)
   const [guardando, setGuardando] = useState(false)
-  const [guardadoOk, setGuardadoOk] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState(0)
   const [subiendo, setSubiendo] = useState(false)
   const [error, setError] = useState('')
+  const [ok, setOk] = useState('')
 
   const handleLogout = async () => { await logout(); navigate('/admin/login') }
 
   useEffect(() => {
     const fetch = async () => {
       try {
-        setCargando(true)
-        const ref = doc(db, 'settings', 'home')
-        const snap = await getDoc(ref)
+        setCargando(true); setError('')
+        const snap = await getDoc(doc(db, 'settings', 'home'))
         if (snap.exists()) {
-          const data = snap.data()
-          setForm({
-            heroTitle: data.heroTitle ?? DEFAULTS.heroTitle,
-            heroSubtitle: data.heroSubtitle ?? DEFAULTS.heroSubtitle,
-            heroTag: data.heroTag ?? DEFAULTS.heroTag,
-            heroImage: data.heroImage ?? DEFAULTS.heroImage,
-          })
-        } else {
-          setForm(DEFAULTS)
-        }
-      } catch (e) {
-        setError(e?.message || 'Error al cargar configuración')
-      } finally {
-        setCargando(false)
-      }
+          const d = snap.data()
+          setForm({ heroTitle: d.heroTitle ?? DEFAULTS.heroTitle, heroSubtitle: d.heroSubtitle ?? DEFAULTS.heroSubtitle, heroTag: d.heroTag ?? DEFAULTS.heroTag, heroImage: d.heroImage ?? DEFAULTS.heroImage })
+        } else { setForm(DEFAULTS) }
+      } catch (e) { setError(e?.message || 'Error al cargar') }
+      finally { setCargando(false) }
     }
     fetch()
   }, [])
 
-  const onChange = (e) => {
-    const { name, value } = e.target
-    setForm((prev) => ({ ...prev, [name]: value }))
-    setGuardadoOk(false)
-    setError('')
-  }
+  const onChange = (e) => { setForm((p) => ({ ...p, [e.target.name]: e.target.value })); setOk('') }
 
   const onSubirImagen = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    try {
-      setError('')
-      setSubiendo(true)
-      setUploadProgress(10)
-      // Simular progreso mientras sube (Cloudinary no da progreso real en fetch simple)
-      const timer = setInterval(() => {
-        setUploadProgress((prev) => Math.min(prev + 15, 85))
-      }, 300)
-      const url = await subirImagenCloudinary(file)
-      clearInterval(timer)
-      setUploadProgress(100)
-      setForm((prev) => ({ ...prev, heroImage: url }))
-      setTimeout(() => setUploadProgress(0), 600)
-    } catch (err) {
-      setError('No se pudo subir la imagen. Verificá Cloudinary (preset / cloud name).')
-      setUploadProgress(0)
-    } finally {
-      setSubiendo(false)
-      e.target.value = ''
-    }
+    const file = e.target.files?.[0]; if (!file) return
+    try { setError(''); setOk(''); setSubiendo(true); const url = await subirImagenCloudinary(file); setForm((p) => ({ ...p, heroImage: url })) }
+    catch { setError('No se pudo subir la imagen.') }
+    finally { setSubiendo(false); e.target.value = '' }
   }
 
   const onGuardar = async () => {
-    if (!form.heroTitle.trim()) { setError('El título es obligatorio.'); return }
     try {
-      setError('')
-      setGuardando(true)
-      const ref = doc(db, 'settings', 'home')
-      await setDoc(ref, {
-        heroTitle: form.heroTitle.trim(),
-        heroSubtitle: form.heroSubtitle.trim(),
-        heroTag: form.heroTag.trim(),
-        heroImage: form.heroImage || null,
-        updatedAt: serverTimestamp(),
-      }, { merge: true })
-      setGuardadoOk(true)
-    } catch (e) {
-      setError(e?.message || 'Error al guardar configuración')
-    } finally {
-      setGuardando(false)
-    }
+      setError(''); setOk(''); setGuardando(true)
+      if (!form.heroTitle.trim()) { setError('El título es obligatorio.'); return }
+      await setDoc(doc(db, 'settings', 'home'), { heroTitle: form.heroTitle.trim(), heroSubtitle: form.heroSubtitle.trim(), heroTag: form.heroTag.trim(), heroImage: form.heroImage || null, updatedAt: serverTimestamp() }, { merge: true })
+      setOk('Guardado ✅ (recargá el Home para ver cambios)')
+    } catch (e) { setError(e?.message || 'Error al guardar') }
+    finally { setGuardando(false) }
   }
 
-  return (
-    <div style={s.root}>
-      <AdminSidebar usuario={usuario} onLogout={handleLogout} />
+  const SidebarContent = () => (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem' }}>
+        <div style={s.logo}>claroscuro</div>
+        {isMobile && <button onClick={() => setSidebarOpen(false)} style={s.closeBtn} type="button"><X size={20} weight="bold" /></button>}
+      </div>
+      <nav style={s.nav}>
+        <NavLink to="/admin" end onClick={() => setSidebarOpen(false)} style={({ isActive }) => (isActive ? { ...s.navItem, ...s.navItemActive } : s.navItem)}>
+          <Package size={18} weight="bold" style={{ marginRight: 10 }} />Gestión de Productos
+        </NavLink>
+        <NavLink to="/admin/home" onClick={() => setSidebarOpen(false)} style={({ isActive }) => (isActive ? { ...s.navItem, ...s.navItemActive } : s.navItem)}>
+          <ImageIcon size={18} weight="bold" style={{ marginRight: 10 }} />Gestionar Banner Principal
+        </NavLink>
+      </nav>
+      <div style={s.sidebarFooter}>
+        <span style={s.emailText}>{usuario?.email}</span>
+        <button onClick={handleLogout} style={s.logoutBtn}><SignOut size={16} weight="bold" style={{ marginRight: 8 }} />Cerrar sesión</button>
+      </div>
+    </>
+  )
 
-      <main style={s.main}>
-        {/* Header */}
-        <div style={s.header}>
-          <div>
-            <h1 style={s.title}>Banner principal</h1>
-            <p style={s.subtitle}>Editá el hero del Home sin tocar código.</p>
-          </div>
-          <button
-            type="button"
-            onClick={onGuardar}
-            style={guardadoOk ? s.btnGuardadoOk : s.btnPrimary}
-            disabled={guardando || cargando}
-          >
-            {guardadoOk
-              ? <><CheckCircle size={15} weight="fill" style={{ marginRight: 7 }} />Guardado</>
-              : guardando ? 'Guardando…' : 'Guardar cambios'
-            }
+  return (
+    <div style={{ ...s.root, flexDirection: isMobile ? 'column' : 'row' }}>
+
+      {/* Desktop sidebar */}
+      {!isMobile && <aside style={s.sidebar}><SidebarContent /></aside>}
+
+      {/* Mobile top bar */}
+      {isMobile && (
+        <div style={s.mobileTopBar}>
+          <button onClick={() => setSidebarOpen(true)} style={s.menuBtn} type="button"><List size={22} weight="bold" /></button>
+          <span style={s.mobileLogoText}>claroscuro</span>
+          <button onClick={onGuardar} style={s.btnPrimarySmall} disabled={guardando || cargando} type="button">
+            {guardando ? '...' : 'Guardar'}
           </button>
         </div>
+      )}
 
-        {cargando && (
-          <div style={s.loadingWrap}>
-            <div style={s.loadingSpinner} />
-            <span style={s.loadingText}>Cargando configuración…</span>
+      {/* Mobile drawer */}
+      {isMobile && sidebarOpen && (
+        <>
+          <div style={s.drawerBackdrop} onClick={() => setSidebarOpen(false)} />
+          <aside style={s.drawerSidebar}><SidebarContent /></aside>
+        </>
+      )}
+
+      {/* Main */}
+      <main style={{ ...s.main, padding: isMobile ? '1.25rem 1rem' : '2rem 2.5rem' }}>
+
+        {!isMobile && (
+          <div style={s.header}>
+            <div>
+              <h1 style={s.title}>Gestionar Banner Principal</h1>
+              <p style={s.subtitle}>Editá el hero del Home sin tocar código.</p>
+            </div>
+            <button type="button" onClick={onGuardar} style={s.btnPrimary} disabled={guardando || cargando}>
+              {guardando ? 'Guardando…' : 'Guardar cambios'}
+            </button>
           </div>
         )}
 
-        {error && (
-          <div style={s.errorBox} role="alert">
-            <X size={14} weight="bold" style={{ marginRight: 6, flexShrink: 0 }} />
-            {error}
+        {isMobile && (
+          <div style={{ marginBottom: '1rem' }}>
+            <h1 style={{ ...s.title, fontSize: '1.4rem' }}>Banner Principal</h1>
+            <p style={s.subtitle}>Editá el hero del Home.</p>
           </div>
+        )}
+
+        {cargando && <div style={s.loading}>Cargando…</div>}
+
+        {(error || ok) && !cargando && (
+          <div style={{ ...s.msg, ...(error ? s.msgError : s.msgOk) }} role="status">{error || ok}</div>
         )}
 
         {!cargando && (
-          <div style={s.grid}>
-            {/* Columna formulario */}
-            <section style={s.card}>
-              <h2 style={s.cardTitle}>Contenido del hero</h2>
+          <div style={{ ...s.grid, gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr' }}>
 
+            {/* Form */}
+            <section style={s.card}>
+              <h2 style={s.h2}>Contenido</h2>
               <label style={s.label}>
-                Título principal *
+                Título
                 <input name="heroTitle" value={form.heroTitle} onChange={onChange} placeholder="Título principal" style={s.input} />
               </label>
-
               <label style={s.label}>
                 Subtítulo
-                <textarea
-                  name="heroSubtitle"
-                  value={form.heroSubtitle}
-                  onChange={onChange}
-                  placeholder="Texto descriptivo"
-                  style={{ ...s.input, minHeight: 100, resize: 'vertical', paddingTop: 10 }}
-                />
+                <textarea name="heroSubtitle" value={form.heroSubtitle} onChange={onChange} placeholder="Texto descriptivo" style={{ ...s.input, minHeight: 100, resize: 'vertical', paddingTop: 12 }} />
               </label>
-
               <label style={s.label}>
-                Tag / Badge
+                Tag (badge)
                 <input name="heroTag" value={form.heroTag} onChange={onChange} placeholder="Ej: Nueva temporada" style={s.input} />
               </label>
-
-              {/* Upload imagen */}
-              {/* Upload imagen */}
-              <div style={s.imgSection}>
-                <p style={s.label}>Imagen del hero</p>
-
-                <div style={{ ...s.uploadBox, ...(form.heroImage ? s.uploadBoxHasImage : {}), ...(subiendo ? s.uploadBoxLoading : {}) }}>
-                  <input
-                    id="heroImageInput"
-                    type="file"
-                    accept="image/*"
-                    onChange={onSubirImagen}
-                    style={{ display: 'none' }}
-                    disabled={subiendo}
-                  />
-
-                  {!form.heroImage ? (
-                    <label htmlFor="heroImageInput" style={s.uploadEmpty}>
-                      <UploadSimple size={20} weight="light" style={{ color: '#aaa', marginBottom: 6 }} />
-                      <span style={s.uploadText}>{subiendo ? `Subiendo… ${uploadProgress}%` : 'Clic para subir imagen'}</span>
-                      <span style={s.uploadSub}>Recomendado: horizontal 1600×1000</span>
-                    </label>
-                  ) : (
-                    <div style={s.uploadFilled}>
-                      <img src={form.heroImage} alt="Imagen actual" style={s.uploadThumb} />
-
-                      <div style={s.uploadMeta}>
-                        <div style={s.uploadMetaTitle}>Imagen cargada</div>
-                        <div style={s.uploadMetaSub}>Podés cambiarla o quitarla.</div>
-
-                        <div style={s.uploadActions}>
-                          <label htmlFor="heroImageInput" style={s.btnSecondary} title="Cambiar imagen">
-                            <UploadSimple size={14} weight="bold" />
-                            Cambiar
-                          </label>
-
-                          <button
-                            type="button"
-                            onClick={() => { setForm((p) => ({ ...p, heroImage: null })); setGuardadoOk(false); }}
-                            style={s.btnDanger}
-                            title="Quitar imagen"
-                          >
-                            <X size={14} weight="bold" />
-                            Quitar
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {subiendo && (
-                  <div style={s.progressBar}>
-                    <div style={{ ...s.progressFill, width: `${uploadProgress}%` }} />
-                  </div>
+              <div style={s.row}>
+                <label style={s.fileLabel}>
+                  {subiendo ? 'Subiendo…' : 'Subir imagen'}
+                  <input type="file" accept="image/*" onChange={onSubirImagen} style={{ display: 'none' }} />
+                </label>
+                {form.heroImage && (
+                  <button type="button" onClick={() => setForm((p) => ({ ...p, heroImage: null }))} style={s.btnGhost}>Quitar imagen</button>
                 )}
               </div>
-
-
+              <p style={s.help}>Recomendación: imagen horizontal (ej. 1600×1000). Se mostrará recortada tipo "cover".</p>
             </section>
 
-            {/* Columna preview */}
+            {/* Preview */}
             <section style={s.card}>
-              <h2 style={s.cardTitle}>Vista previa</h2>
-
-              <div style={s.preview}>
+              <h2 style={s.h2}>Vista previa</h2>
+              <div style={{ ...s.preview, height: isMobile ? 180 : 260 }}>
                 {form.heroImage ? (
-                  <>
-                    <img src={form.heroImage} alt="Hero preview" style={s.previewImg} />
-                    <div style={s.previewOverlay} />
-                  </>
+                  <><img src={form.heroImage} alt="Hero preview" style={s.previewImg} /><div style={s.previewOverlay} /></>
                 ) : (
-                  <>
-                    <div style={s.previewFallbackGlow} />
-                    <div style={s.previewFallbackGrid} />
-                  </>
+                  <><div style={s.previewFallbackGlow} /><div style={s.previewFallbackGrid} /><div style={s.previewFallbackOverlay} /></>
                 )}
                 <div style={s.previewBadge}>{form.heroTag || DEFAULTS.heroTag}</div>
-
-                {/* Overlay con texto encima de imagen */}
-                <div style={s.previewTextOverlay}>
-                  <p style={s.previewTextTitle}>{(form.heroTitle || DEFAULTS.heroTitle).slice(0, 60)}</p>
-                </div>
               </div>
-
               <p style={s.previewTitle}>{form.heroTitle || DEFAULTS.heroTitle}</p>
               <p style={s.previewSub}>{form.heroSubtitle || DEFAULTS.heroSubtitle}</p>
-
-              {/* Guardar desde preview también */}
-              <button
-                type="button"
-                onClick={onGuardar}
-                style={guardadoOk ? s.btnGuardadoOkFull : s.btnPrimaryFull}
-                disabled={guardando || cargando}
-              >
-                {guardadoOk
-                  ? <><CheckCircle size={14} weight="fill" style={{ marginRight: 7 }} />Guardado correctamente</>
-                  : guardando ? 'Guardando…' : 'Guardar cambios'
-                }
-              </button>
-              {/* Tips */}
-              <div style={s.tipsCard}>
-                <div style={s.tipsHeader}>
-                  <Info size={14} weight="fill" style={{ color: 'rgba(184,149,106,0.8)', flexShrink: 0 }} />
-                  <span style={s.tipsTitle}>Consejos</span>
-                </div>
-                <ul style={s.tipsList}>
-                  <li style={s.tipsItem}>La imagen se muestra recortada (tipo "cover") en el hero.</li>
-                  <li style={s.tipsItem}>El título y subtítulo también son editables desde acá.</li>
-                  <li style={s.tipsItem}>Recargá el Home luego de guardar para ver los cambios.</li>
-                </ul>
-              </div>
             </section>
           </div>
+        )}
+
+        {/* Mobile save button at bottom */}
+        {isMobile && !cargando && (
+          <button type="button" onClick={onGuardar} style={{ ...s.btnPrimary, width: '100%', marginTop: '1rem', justifyContent: 'center' }} disabled={guardando}>
+            {guardando ? 'Guardando…' : 'Guardar cambios'}
+          </button>
         )}
       </main>
     </div>
@@ -292,161 +207,49 @@ const HomeSettings = () => {
 }
 
 const s = {
-  root: { display: 'flex', minHeight: '100vh', background: '#f4f3ef', fontFamily: "'Helvetica Neue', Arial, sans-serif" },
-  main: { flex: 1, padding: '2rem 2.5rem', overflowX: 'auto' },
-
-  loadingWrap: { display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '3rem', justifyContent: 'center' },
-  loadingSpinner: { width: 20, height: 20, border: '2px solid #e0ddd6', borderTopColor: '#1a1a1a', borderRadius: '50%', animation: 'spin 0.65s linear infinite' },
-  loadingText: { color: '#888', fontSize: '0.9rem' },
-
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' },
-  title: { margin: '0 0 0.2rem', fontSize: '1.65rem', fontWeight: 800, color: '#111', letterSpacing: '-0.02em' },
-  subtitle: { margin: 0, color: '#888', fontSize: '0.88rem' },
-
-  btnPrimary: { display: 'inline-flex', alignItems: 'center', background: '#111', color: '#fff', border: 'none', padding: '0.72rem 1.25rem', borderRadius: '10px', cursor: 'pointer', fontSize: '0.88rem', fontWeight: 700, boxShadow: '0 4px 14px rgba(0,0,0,0.14)' },
-  btnGuardadoOk: { display: 'inline-flex', alignItems: 'center', background: '#1a6b3a', color: '#fff', border: 'none', padding: '0.72rem 1.25rem', borderRadius: '10px', cursor: 'default', fontSize: '0.88rem', fontWeight: 700 },
-
-  errorBox: { display: 'flex', alignItems: 'flex-start', background: '#fdf0ee', color: '#8a3525', padding: '0.85rem 1.1rem', borderRadius: '10px', marginBottom: '1.25rem', fontSize: '0.9rem', border: '1px solid #f0c0b5' },
-
-  grid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' },
-
-  card: { borderRadius: 14, background: '#fff', boxShadow: '0 1px 10px rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.04)', padding: '1.35rem' },
-  cardTitle: { margin: '0 0 1.25rem', fontWeight: 800, color: '#111', fontSize: '0.95rem' },
-
-  label: { display: 'grid', gap: 6, marginTop: 14, color: '#555', fontWeight: 700, fontSize: '0.82rem' },
-  input: { width: '100%', padding: '0.72rem 0.9rem', borderRadius: 10, border: '1px solid #e0ddd6', background: '#fff', outline: 'none', color: '#1a1a1a', fontWeight: 500, fontSize: '0.9rem', boxSizing: 'border-box' },
-
-  imgSection: { marginTop: '1.25rem' },
-  uploadArea: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '1.25rem', border: '1.5px dashed #d0ccc4', borderRadius: '12px', cursor: 'pointer', background: '#faf9f6', marginTop: 8 },
-  uploadAreaLoading: { borderColor: '#b3dfc0', background: '#f4faf6' },
-  uploadText: { fontWeight: 700, fontSize: '0.88rem', color: '#555' },
-  uploadSub: { marginTop: '0.2rem', fontSize: '0.76rem', color: '#bbb' },
-
-  progressBar: { height: 4, background: '#f0ede6', borderRadius: 999, marginTop: '0.6rem', overflow: 'hidden' },
-  progressFill: { height: '100%', background: '#1a6b3a', borderRadius: 999, transition: 'width 0.25s ease' },
-
-  imgPreviewWrap: { marginTop: '0.85rem', position: 'relative', borderRadius: 10, overflow: 'hidden', border: '1px solid #e0ddd6' },
-  imgPreview: { width: '100%', height: 150, objectFit: 'cover', display: 'block' },
-  imgDeleteBtn: { display: 'flex', alignItems: 'center', gap: 5, position: 'absolute', top: 8, right: 8, background: 'rgba(255,255,255,0.9)', border: '1px solid #e0ddd6', borderRadius: 8, padding: '0.3rem 0.7rem', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 700, color: '#555', backdropFilter: 'blur(4px)' },
-
-  tipsCard: { marginTop: '1.25rem', background: 'rgba(184,149,106,0.07)', border: '1px solid rgba(184,149,106,0.18)', borderRadius: 12, padding: '0.9rem 1rem' },
-  tipsHeader: { display: 'flex', alignItems: 'center', gap: 7, marginBottom: '0.55rem' },
-  tipsTitle: { fontSize: '0.72rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(184,149,106,0.9)', fontWeight: 800 },
-  tipsList: { margin: 0, paddingLeft: '1.1rem' },
-  tipsItem: { fontSize: '0.82rem', color: '#7a6a50', lineHeight: 1.65, marginBottom: '0.25rem' },
-
-  // Preview
-  preview: { position: 'relative', width: '100%', height: 240, borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(0,0,0,0.08)', background: '#f5f3ef', marginBottom: '0.85rem' },
+  root: { display: 'flex', minHeight: '100vh', background: '#f5f5f0', fontFamily: "'Helvetica Neue', Arial, sans-serif" },
+  sidebar: { width: '240px', background: '#1a1a1a', color: '#fff', display: 'flex', flexDirection: 'column', padding: '2rem 1.5rem', position: 'sticky', top: 0, height: '100vh', flexShrink: 0 },
+  mobileTopBar: { background: '#1a1a1a', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.85rem 1rem', position: 'sticky', top: 0, zIndex: 100 },
+  mobileLogoText: { fontFamily: 'Georgia, serif', fontSize: '1.1rem', letterSpacing: '0.05em', color: '#fff' },
+  menuBtn: { background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0.25rem' },
+  btnPrimarySmall: { background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.25)', color: '#fff', borderRadius: '8px', padding: '0.45rem 0.85rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 700 },
+  closeBtn: { background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center' },
+  drawerBackdrop: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200 },
+  drawerSidebar: { position: 'fixed', top: 0, left: 0, bottom: 0, width: '260px', background: '#1a1a1a', color: '#fff', display: 'flex', flexDirection: 'column', padding: '1.5rem 1.25rem', zIndex: 300, overflowY: 'auto' },
+  logo: { fontFamily: 'Georgia, serif', fontSize: '1.4rem', letterSpacing: '0.05em' },
+  nav: { flex: 1, display: 'grid', gap: 8, alignContent: 'start' },
+  navItem: { display: 'flex', alignItems: 'center', padding: '0.65rem 0.75rem', borderRadius: '10px', fontSize: '0.92rem', color: '#fff', textDecoration: 'none', border: '1px solid rgba(255,255,255,0.10)', background: 'transparent' },
+  navItemActive: { background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.18)' },
+  sidebarFooter: { borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '1rem', marginTop: '1rem' },
+  emailText: { display: 'block', fontSize: '0.75rem', color: '#aaa', marginBottom: '0.75rem', wordBreak: 'break-all' },
+  logoutBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', padding: '0.5rem 0.75rem', cursor: 'pointer', borderRadius: '10px', fontSize: '0.82rem', width: '100%' },
+  main: { flex: 1, overflowX: 'auto' },
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '1.25rem', flexWrap: 'wrap' },
+  title: { margin: '0 0 0.25rem', fontSize: '1.8rem', fontWeight: 700, color: '#1a1a1a' },
+  subtitle: { margin: 0, color: '#666', fontSize: '0.9rem' },
+  btnPrimary: { display: 'inline-flex', alignItems: 'center', background: '#1a1a1a', color: '#fff', border: 'none', padding: '0.75rem 1.15rem', borderRadius: '10px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 700, boxShadow: '0 6px 18px rgba(0,0,0,0.10)' },
+  loading: { padding: '2rem 0', color: '#666' },
+  msg: { marginBottom: 14, padding: '0.85rem 1rem', borderRadius: 14, border: '1px solid', lineHeight: 1.6 },
+  msgError: { background: 'rgba(220,38,38,0.08)', borderColor: 'rgba(220,38,38,0.22)', color: 'rgba(185,28,28,1)' },
+  msgOk: { background: 'rgba(34,197,94,0.08)', borderColor: 'rgba(34,197,94,0.20)', color: 'rgba(21,128,61,1)' },
+  grid: { display: 'grid', gap: 16 },
+  card: { borderRadius: 12, background: '#fff', boxShadow: '0 1px 12px rgba(0,0,0,0.06)', border: '1px solid rgba(0,0,0,0.04)', padding: '1.1rem 1.1rem 1.25rem' },
+  h2: { margin: '0 0 12px', fontWeight: 900, color: '#1a1a1a' },
+  label: { display: 'grid', gap: 8, marginTop: 12, color: '#666', fontWeight: 800, fontSize: '0.92rem' },
+  input: { width: '100%', padding: '0.75rem 0.9rem', borderRadius: 10, border: '1px solid #ddd', background: '#fff', outline: 'none', color: '#1a1a1a', fontWeight: 600, boxSizing: 'border-box' },
+  row: { display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 14 },
+  fileLabel: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0.75rem 1rem', borderRadius: 10, border: '1px solid #ddd', background: '#fff', cursor: 'pointer', fontWeight: 900, color: '#1a1a1a' },
+  btnGhost: { padding: '0.75rem 1rem', borderRadius: 10, border: '1px solid #ddd', background: 'transparent', cursor: 'pointer', fontWeight: 900, color: '#1a1a1a' },
+  help: { margin: '0.9rem 0 0', color: '#666', lineHeight: 1.7, fontSize: '0.92rem' },
+  preview: { position: 'relative', width: '100%', borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(0,0,0,0.08)', background: 'linear-gradient(135deg, rgba(0,0,0,0.06), rgba(0,0,0,0.02))' },
   previewImg: { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' },
-  previewOverlay: { position: 'absolute', inset: 0, background: 'linear-gradient(180deg, transparent, rgba(0,0,0,0.22))' },
-  previewFallbackGlow: { position: 'absolute', inset: '-30%', background: 'radial-gradient(circle at 35% 40%, rgba(184,149,106,0.2), transparent 55%)', filter: 'blur(14px)' },
-  previewFallbackGrid: { position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(rgba(0,0,0,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.05) 1px, transparent 1px)', backgroundSize: '40px 40px', opacity: 0.3 },
-  previewBadge: { position: 'absolute', left: 10, bottom: 10, padding: '0.3rem 0.65rem', borderRadius: 999, fontSize: '0.68rem', fontWeight: 800, letterSpacing: '0.07em', textTransform: 'uppercase', background: 'rgba(255,255,255,0.88)', border: '1px solid rgba(0,0,0,0.08)', color: '#1a1a1a', backdropFilter: 'blur(6px)' },
-  previewTextOverlay: { position: 'absolute', bottom: 34, left: 12, right: 12 },
-  previewTextTitle: { margin: 0, fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: '1.05rem', fontWeight: 400, color: 'rgba(255,255,255,0.88)', lineHeight: 1.3, textShadow: '0 1px 6px rgba(0,0,0,0.4)' },
-  previewTitle: { margin: '0 0 0.4rem', fontWeight: 800, color: '#111', fontSize: '0.92rem' },
-  previewSub: { margin: '0 0 1.1rem', color: '#888', lineHeight: 1.65, fontSize: '0.85rem' },
-
-  btnPrimaryFull: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', background: '#111', color: '#fff', border: 'none', padding: '0.82rem', borderRadius: '12px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 700, boxShadow: '0 4px 12px rgba(0,0,0,0.12)' },
-  btnGuardadoOkFull: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', background: '#1a6b3a', color: '#fff', border: 'none', padding: '0.82rem', borderRadius: '12px', cursor: 'default', fontSize: '0.9rem', fontWeight: 700 },
-  uploadBox: {
-    marginTop: 8,
-    border: '1.5px dashed #d0ccc4',
-    borderRadius: 12,
-    background: '#faf9f6',
-    overflow: 'hidden',
-  },
-
-  uploadBoxHasImage: {
-    borderStyle: 'solid',
-    borderColor: '#e0ddd6',
-    background: '#fff',
-  },
-
-  uploadBoxLoading: {
-    borderColor: '#b3dfc0',
-    background: '#f4faf6',
-  },
-
-  uploadEmpty: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '1.25rem',
-    cursor: 'pointer',
-  },
-
-  uploadFilled: {
-    display: 'flex',
-    gap: 12,
-    padding: '0.9rem',
-    alignItems: 'center',
-  },
-
-  uploadThumb: {
-    width: 96,
-    height: 64,
-    borderRadius: 10,
-    objectFit: 'cover',
-    border: '1px solid #e0ddd6',
-    flexShrink: 0,
-  },
-
-  uploadMeta: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 6,
-    minWidth: 0,
-    flex: 1,
-  },
-
-  uploadMetaTitle: {
-    fontSize: '0.86rem',
-    fontWeight: 800,
-    color: '#111',
-  },
-
-  uploadMetaSub: {
-    fontSize: '0.8rem',
-    color: '#888',
-    lineHeight: 1.4,
-  },
-
-  uploadActions: {
-    display: 'flex',
-    gap: 8,
-    marginTop: 6,
-    flexWrap: 'wrap',
-  },
-
-  btnSecondary: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 6,
-    padding: '0.45rem 0.75rem',
-    borderRadius: 10,
-    cursor: 'pointer',
-    border: '1px solid #e0ddd6',
-    background: '#fff',
-    color: '#1a1a1a',
-    fontSize: '0.82rem',
-    fontWeight: 800,
-  },
-
-  btnDanger: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 6,
-    padding: '0.45rem 0.75rem',
-    borderRadius: 10,
-    cursor: 'pointer',
-    border: '1px solid #f0c0b5',
-    background: '#fdf0ee',
-    color: '#8a3525',
-    fontSize: '0.82rem',
-    fontWeight: 800,
-  },
+  previewOverlay: { position: 'absolute', inset: 0, background: 'linear-gradient(180deg, transparent, rgba(0,0,0,0.18))' },
+  previewFallbackGlow: { position: 'absolute', inset: '-40%', background: 'radial-gradient(circle at 30% 30%, rgba(173,127,82,0.25), transparent 55%), radial-gradient(circle at 70% 70%, rgba(0,0,0,0.08), transparent 50%)', filter: 'blur(12px)' },
+  previewFallbackGrid: { position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(rgba(0,0,0,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.06) 1px, transparent 1px)', backgroundSize: '48px 48px', opacity: 0.25 },
+  previewFallbackOverlay: { position: 'absolute', inset: 0, background: 'linear-gradient(180deg, transparent, rgba(0,0,0,0.05))' },
+  previewBadge: { position: 'absolute', left: 12, bottom: 12, padding: '0.35rem 0.7rem', borderRadius: 999, fontSize: '0.72rem', fontWeight: 900, letterSpacing: '0.06em', textTransform: 'uppercase', background: 'rgba(255,255,255,0.86)', border: '1px solid rgba(0,0,0,0.10)', color: '#1a1a1a' },
+  previewTitle: { margin: '1rem 0 0.35rem', fontWeight: 900, color: '#1a1a1a' },
+  previewSub: { margin: 0, color: '#666', lineHeight: 1.7 },
 }
 
 export default HomeSettings
