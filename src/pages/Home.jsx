@@ -1,12 +1,64 @@
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, CaretLeft, CaretRight, Sparkle } from '@phosphor-icons/react'
+import { ArrowRight, CaretLeft, CaretRight } from '@phosphor-icons/react'
+import { doc, getDoc } from 'firebase/firestore'
+import { db } from '../firebase/config'
 import { useProductos } from '../hooks/useProductos'
 import { CATEGORIAS } from '../constants/categorias'
 
+const DEFAULT_HERO = {
+  heroTitle: 'Una colección minimal, cuidada y atemporal.',
+  heroSubtitle:
+    'Descubrí prendas pensadas para durar. Armá tu carrito y finalizá el pedido por WhatsApp en segundos.',
+  heroTag: 'Nueva temporada',
+  heroImage: null,
+}
+
 const Home = () => {
-  const { productos: destacados, cargando: cargandoDestacados } = useProductos({ destacado: true })
-  const { productos: ultimos, cargando: cargandoUltimos } = useProductos()
+  // ── Hero settings (Firestore)
+  const [hero, setHero] = useState(DEFAULT_HERO)
+  const [heroLoading, setHeroLoading] = useState(true)
+
+  useEffect(() => {
+    const run = async () => {
+      try {
+        setHeroLoading(true)
+        const ref = doc(db, 'settings', 'home')
+        const snap = await getDoc(ref)
+        if (snap.exists()) {
+          const data = snap.data()
+          setHero({
+            heroTitle: data.heroTitle ?? DEFAULT_HERO.heroTitle,
+            heroSubtitle: data.heroSubtitle ?? DEFAULT_HERO.heroSubtitle,
+            heroTag: data.heroTag ?? DEFAULT_HERO.heroTag,
+            heroImage: data.heroImage ?? DEFAULT_HERO.heroImage,
+          })
+        } else {
+          setHero(DEFAULT_HERO)
+        }
+      } catch (e) {
+        // Si falla, mostramos defaults (sin romper la home)
+        console.warn('[Home] No se pudo cargar settings/home. Usando defaults.', e)
+        setHero(DEFAULT_HERO)
+      } finally {
+        setHeroLoading(false)
+      }
+    }
+    run()
+  }, [])
+
+  // ── Productos
+  const {
+    productos: destacados,
+    cargando: cargandoDestacados,
+    error: errorDestacados,
+  } = useProductos({ destacado: true, limite: 12 })
+
+  const {
+    productos: ultimos,
+    cargando: cargandoUltimos,
+    error: errorUltimos,
+  } = useProductos({ limite: 9 })
 
   const sliderRef = useRef(null)
 
@@ -15,26 +67,24 @@ const Home = () => {
   const scrollSlider = (dir) => {
     const el = sliderRef.current
     if (!el) return
-    const amount = Math.round(el.clientWidth * 0.85)
+    const amount = Math.round(el.clientWidth * 0.9)
     el.scrollBy({ left: dir === 'left' ? -amount : amount, behavior: 'smooth' })
   }
 
   return (
     <main style={s.page}>
-      {/* HERO / CAROUSEL FIJO */}
+      {/* HERO */}
       <section style={s.hero} className="anim-fade-up">
         <div style={s.heroInner}>
           <div style={s.heroContent}>
-            <p style={s.kicker}>
-              <Sparkle size={14} weight="fill" style={{ marginRight: 8, color: 'var(--accent)' }} />
-              Indumentaria & accesorios
-            </p>
+            <div style={s.kickerRow}>
+              <span style={s.kickerDot} />
+              <span style={s.kicker}>INDUMENTARIA & ACCESORIOS</span>
+            </div>
 
-            <h1 style={s.heroTitle}>Una colección minimal, cuidada y atemporal.</h1>
+            <h1 style={s.heroTitle}>{hero.heroTitle}</h1>
 
-            <p style={s.heroSub}>
-              Descubrí prendas pensadas para durar. Armá tu carrito y finalizá el pedido por WhatsApp en segundos.
-            </p>
+            <p style={s.heroSub}>{hero.heroSubtitle}</p>
 
             <div style={s.heroActions}>
               <Link to="/catalogo" style={s.btnPrimary}>
@@ -42,19 +92,30 @@ const Home = () => {
                 <ArrowRight size={16} weight="bold" style={{ marginLeft: 10 }} />
               </Link>
 
-              <Link to="/catalogo?categoria=sale" style={s.btnSecondary}>
+              <Link to="/catalogo?categoria=sale" style={s.btnGhost}>
                 Ver sale
               </Link>
             </div>
           </div>
 
-          {/* “Imagen” editorial sin depender de assets */}
           <div style={s.heroMedia} aria-hidden="true">
             <div style={s.heroFrame}>
-              <div style={s.heroGlow} />
-              <div style={s.heroGrid} />
-              <div style={s.heroOverlay} />
-              <div style={s.heroLabel}>Nueva temporada</div>
+              {/* Imagen real si existe, sino fallback elegante */}
+              {heroLoading ? (
+                <div style={s.skeletonHero} className="skeleton" />
+              ) : hero.heroImage ? (
+                <>
+                  <img src={hero.heroImage} alt="" style={s.heroImg} loading="eager" />
+                  <div style={s.heroImgOverlay} />
+                </>
+              ) : (
+                <>
+                  <div style={s.heroFallback} />
+                  <div style={s.heroFallbackOverlay} />
+                </>
+              )}
+
+              <div style={s.heroBadge}>{hero.heroTag}</div>
             </div>
           </div>
         </div>
@@ -65,51 +126,67 @@ const Home = () => {
         <div style={s.sectionHead}>
           <div>
             <h2 style={s.h2}>Destacados</h2>
-            <p style={s.sub}>Nuestros seleccionados de la semana.</p>
+            <p style={s.sub}>Selección curada de la semana.</p>
           </div>
 
-          <div style={s.sliderControls}>
-            <button type="button" onClick={() => scrollSlider('left')} style={s.iconBtn} aria-label="Anterior">
+          <div style={s.controls}>
+            <button type="button" onClick={() => scrollSlider('left')} style={s.ctrlBtn} aria-label="Anterior">
               <CaretLeft size={18} weight="bold" />
             </button>
-            <button type="button" onClick={() => scrollSlider('right')} style={s.iconBtn} aria-label="Siguiente">
+            <button type="button" onClick={() => scrollSlider('right')} style={s.ctrlBtn} aria-label="Siguiente">
               <CaretRight size={18} weight="bold" />
             </button>
           </div>
         </div>
 
+        {errorDestacados ? (
+          <div style={s.noticeError}>
+            <p style={s.noticeTitle}>No se pudieron cargar los destacados.</p>
+            <p style={s.noticeText}>
+              Si Firestore pide un índice compuesto, crealo desde el link del error en la consola.
+            </p>
+          </div>
+        ) : null}
+
         <div style={s.slider} ref={sliderRef}>
-          {cargandoDestacados
-            ? Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} style={s.cardSkeleton} className="anim-fade-in" />
-              ))
-            : (destacados || []).length === 0
-              ? (
-                <div style={s.emptyBox}>
-                  <p style={s.emptyTitle}>Aún no hay productos destacados.</p>
-                  <p style={s.emptySub}>Podés marcarlos como “destacado” desde el panel admin.</p>
+          {cargandoDestacados ? (
+            Array.from({ length: 6 }).map((_, i) => <div key={i} style={s.cardSkel} className="skeleton" />)
+          ) : (destacados || []).length === 0 ? (
+            <div style={s.noticeSoft}>
+              <p style={s.noticeTitleSoft}>Aún no hay productos destacados.</p>
+              <p style={s.noticeText}>Podés marcarlos como “destacado” desde el panel admin.</p>
+            </div>
+          ) : (
+            destacados.map((p) => (
+              <Link key={p.id} to={`/producto/${p.id}`} style={s.card}>
+                <div style={s.cardImgWrap}>
+                  {p.imagenes?.[0] ? (
+                    <img src={p.imagenes[0]} alt={p.nombre} style={s.cardImg} loading="lazy" />
+                  ) : (
+                    <div style={s.cardImgFallback} />
+                  )}
                 </div>
-              )
-              : destacados.map((p) => (
-                <Link key={p.id} to={`/producto/${p.id}`} style={s.card} className="anim-fade-up">
-                  <div style={s.cardImgWrap}>
-                    {p.imagenes?.[0] ? (
-                      <img src={p.imagenes[0]} alt={p.nombre} style={s.cardImg} loading="lazy" />
-                    ) : (
-                      <div style={s.cardImgFallback} />
-                    )}
+
+                <div style={s.cardBody}>
+                  <div style={s.cardTop}>
+                    <p style={s.cardName}>{p.nombre}</p>
+                    <p style={s.cardPrice}>${(p.precio || 0).toLocaleString('es-AR')}</p>
                   </div>
 
-                  <div style={s.cardBody}>
-                    <p style={s.cardName}>{p.nombre}</p>
-                    <div style={s.cardMeta}>
-                      <span style={s.price}>${(p.precio || 0).toLocaleString('es-AR')}</span>
-                      <span style={s.metaDot}>•</span>
-                      <span style={s.metaText}>{labelCategoria(p.categoria)}</span>
-                    </div>
+                  <div style={{ marginTop: 10 }}>
+                    <ColorSwatches colores={p?.variantes?.colores} />
                   </div>
-                </Link>
-              ))}
+
+                  <div style={s.cardBottom}>
+                    <span style={s.cardMeta}>{labelCategoria(p.categoria)}</span>
+                    <span style={s.cardCta}>
+                      Ver detalles <ArrowRight size={14} weight="bold" style={{ marginLeft: 8 }} />
+                    </span>
+                  </div>
+                </div>
+              </Link>
+            ))
+          )}
         </div>
       </section>
 
@@ -126,37 +203,55 @@ const Home = () => {
           </Link>
         </div>
 
+        {errorUltimos ? (
+          <div style={s.noticeError}>
+            <p style={s.noticeTitle}>No se pudo cargar el catálogo.</p>
+            <p style={s.noticeText}>Reintentá en unos segundos.</p>
+          </div>
+        ) : null}
+
         <div style={s.grid}>
           {cargandoUltimos
-            ? Array.from({ length: 9 }).map((_, i) => (
-                <div key={i} style={s.gridSkeleton} className="anim-fade-in" />
-              ))
+            ? Array.from({ length: 9 }).map((_, i) => <div key={i} style={s.gridSkel} className="skeleton" />)
             : previewCatalogo.map((p) => (
-                <Link key={p.id} to={`/producto/${p.id}`} style={s.gridCard} className="anim-fade-up">
-                  <div style={s.gridImgWrap}>
-                    {p.imagenes?.[0] ? (
-                      <img src={p.imagenes[0]} alt={p.nombre} style={s.gridImg} loading="lazy" />
-                    ) : (
-                      <div style={s.gridImgFallback} />
-                    )}
-                  </div>
-                  <div style={s.gridBody}>
+              <article key={p.id} style={s.gridCard}>
+                <Link to={`/producto/${p.id}`} style={s.gridImgWrap} aria-label={`Ver ${p.nombre}`}>
+                  {p.imagenes?.[0] ? (
+                    <img src={p.imagenes[0]} alt={p.nombre} style={s.gridImg} loading="lazy" />
+                  ) : (
+                    <div style={s.gridImgFallback} />
+                  )}
+                </Link>
+
+                <div style={s.gridBody}>
+                  <div style={s.gridTop}>
                     <p style={s.gridName}>{p.nombre}</p>
                     <p style={s.gridPrice}>${(p.precio || 0).toLocaleString('es-AR')}</p>
                   </div>
-                </Link>
-              ))}
+
+                  <div style={{ marginTop: 10 }}>
+                    <ColorSwatches colores={p?.variantes?.colores} />
+                  </div>
+
+                  <div style={{ marginTop: 14 }}>
+                    <Link to={`/producto/${p.id}`} style={s.btnDetails}>
+                      Ver detalles <ArrowRight size={14} weight="bold" style={{ marginLeft: 10 }} />
+                    </Link>
+                  </div>
+                </div>
+              </article>
+            ))}
         </div>
 
         <div style={s.centerCta}>
-          <Link to="/catalogo" style={s.btnPrimarySoft}>
+          <Link to="/catalogo" style={s.btnSoft}>
             Ver todo el catálogo
             <ArrowRight size={16} weight="bold" style={{ marginLeft: 10 }} />
           </Link>
         </div>
       </section>
 
-      {/* CATEGORÍAS (simple, pro, sin ruido) */}
+      {/* CATEGORÍAS */}
       <section style={{ ...s.section, paddingBottom: '5rem' }}>
         <div style={s.sectionHead}>
           <div>
@@ -165,15 +260,42 @@ const Home = () => {
           </div>
         </div>
 
-        <div style={s.chips}>
-          {CATEGORIAS.map((c) => (
-            <Link key={c.value} to={`/catalogo?categoria=${c.value}`} style={s.chip}>
-              {c.label}
-            </Link>
-          ))}
+        <div style={s.categoryPanel}>
+          <div style={s.chips}>
+            {CATEGORIAS.map((c) => (
+              <Link key={c.value} to={`/catalogo?categoria=${c.value}`} style={s.chip}>
+                {c.label}
+              </Link>
+            ))}
+          </div>
         </div>
       </section>
     </main>
+  )
+}
+
+const ColorSwatches = ({ colores }) => {
+  const list = Array.isArray(colores) ? colores : []
+  if (list.length === 0) return null
+
+  const max = 5
+  const shown = list.slice(0, max)
+  const rest = list.length - shown.length
+
+  return (
+    <div style={s.swatches} aria-label="Colores disponibles">
+      {shown.map((c, idx) => (
+        <span
+          key={`${c?.nombre || 'color'}-${idx}`}
+          title={c?.nombre || 'Color'}
+          style={{
+            ...s.swatch,
+            background: c?.hex || '#ddd',
+          }}
+        />
+      ))}
+      {rest > 0 ? <span style={s.swatchMore}>+{rest}</span> : null}
+    </div>
   )
 }
 
@@ -184,255 +306,271 @@ const labelCategoria = (value) => {
 }
 
 const s = {
-  page: { maxWidth: '1100px', margin: '0 auto', padding: '2.5rem 2.5rem 0' },
+  page: { maxWidth: 1120, margin: '0 auto', padding: '2.5rem 2.5rem 0', position: 'relative', zIndex: 1 },
 
   hero: {
-    borderRadius: '22px',
+    borderRadius: 24,
+    background: 'var(--surface)',
     border: '1px solid var(--border)',
-    background: 'rgba(255,255,255,0.70)',
-    backdropFilter: 'blur(18px)',
-    WebkitBackdropFilter: 'blur(18px)',
-    boxShadow: 'var(--shadow-md)',
+    boxShadow: 'var(--shadow-lg)',
+    backdropFilter: 'var(--glass)',
+    WebkitBackdropFilter: 'var(--glass)',
     overflow: 'hidden',
   },
   heroInner: {
     display: 'grid',
-    gridTemplateColumns: '1.15fr 0.85fr',
-    gap: '1.75rem',
-    padding: '2.25rem',
+    gridTemplateColumns: '1.1fr 0.9fr',
+    gap: '2.25rem',
+    padding: '2.6rem',
     alignItems: 'center',
   },
-  heroContent: { maxWidth: '60ch' },
+  heroContent: { maxWidth: '62ch' },
+  kickerRow: { display: 'inline-flex', alignItems: 'center', gap: 10, marginBottom: 14 },
+  kickerDot: { width: 6, height: 6, borderRadius: 999, background: 'var(--accent)' },
   kicker: {
-    margin: 0,
     fontSize: '0.72rem',
-    letterSpacing: '0.18em',
+    letterSpacing: '0.22em',
     textTransform: 'uppercase',
     color: 'var(--ink-3)',
-    fontWeight: 700,
-    display: 'inline-flex',
-    alignItems: 'center',
+    fontWeight: 400,
   },
   heroTitle: {
-    margin: '0.75rem 0 0.75rem',
     fontFamily: 'var(--font-display)',
-    fontSize: '2.4rem',
-    fontWeight: 400,
+    fontSize: '2.85rem',
+    lineHeight: 1.02,
+    letterSpacing: '-0.02em',
+    fontWeight: 400, // 👈 lujo (no “negrita”)
     color: 'var(--ink)',
-    lineHeight: 1.1,
+    margin: 0,
   },
   heroSub: {
-    margin: 0,
-    color: 'var(--ink-2)',
-    lineHeight: 1.75,
-    fontSize: '1rem',
+    marginTop: 14,
+    color: 'var(--ink-3)',
+    lineHeight: 1.8,
+    fontSize: '1.04rem',
+    fontWeight: 300,
+    marginBottom: 0,
+    maxWidth: '56ch',
   },
-  heroActions: { display: 'flex', gap: '0.75rem', marginTop: '1.5rem', flexWrap: 'wrap' },
+  heroActions: { marginTop: 22, display: 'flex', gap: 12, flexWrap: 'wrap' },
+
   btnPrimary: {
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: '0.95rem 1.25rem',
-    borderRadius: '999px',
-    background: 'var(--ink)',
-    color: 'var(--bg)',
-    fontSize: '0.86rem',
-    letterSpacing: '0.08em',
+    borderRadius: 999,
+    padding: '0.88rem 1.18rem',
+    background: 'rgba(26,20,16,0.92)',
+    color: '#fff',
+    border: '1px solid rgba(26,20,16,0.35)',
+    fontWeight: 400,
+    letterSpacing: '0.06em',
     textTransform: 'uppercase',
-    fontWeight: 600,
-    boxShadow: 'var(--shadow-sm)',
+    fontSize: '0.78rem',
+    transition: 'var(--transition)',
   },
-  btnSecondary: {
+  btnGhost: {
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: '0.95rem 1.1rem',
-    borderRadius: '999px',
+    borderRadius: 999,
+    padding: '0.88rem 1.18rem',
     background: 'transparent',
     color: 'var(--ink)',
     border: '1px solid var(--border-strong)',
-    fontSize: '0.86rem',
-    letterSpacing: '0.08em',
+    fontWeight: 400,
+    letterSpacing: '0.06em',
     textTransform: 'uppercase',
-    fontWeight: 600,
+    fontSize: '0.78rem',
+    transition: 'var(--transition)',
   },
 
-  heroMedia: { display: 'flex', justifyContent: 'flex-end' },
+  heroMedia: { display: 'grid', placeItems: 'center' },
   heroFrame: {
-    width: '100%',
-    maxWidth: '360px',
-    aspectRatio: '4 / 5',
-    borderRadius: '18px',
-    border: '1px solid rgba(0,0,0,0.08)',
-    overflow: 'hidden',
-    background: 'linear-gradient(135deg, rgba(184,149,106,0.18), rgba(0,0,0,0.02))',
     position: 'relative',
+    width: '100%',
+    maxWidth: 420,
+    height: 340,
+    borderRadius: 20,
+    overflow: 'hidden',
+    border: '1px solid var(--border)',
+    background: 'linear-gradient(135deg, rgba(184,149,106,0.10), rgba(255,255,255,0.10))',
   },
-  heroGlow: {
-    position: 'absolute',
-    inset: '-40%',
-    background: 'radial-gradient(circle at 40% 30%, rgba(184,149,106,0.35), transparent 55%)',
-    filter: 'blur(18px)',
-  },
-  heroGrid: {
-    position: 'absolute',
-    inset: 0,
-    backgroundImage:
-      'linear-gradient(to right, rgba(0,0,0,0.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,0.06) 1px, transparent 1px)',
-    backgroundSize: '26px 26px',
-    opacity: 0.22,
-  },
-  heroOverlay: {
+  skeletonHero: { position: 'absolute', inset: 0, borderRadius: 20 },
+
+  heroImg: { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' },
+  heroImgOverlay: {
     position: 'absolute',
     inset: 0,
-    background: 'linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.75))',
+    background: 'linear-gradient(180deg, rgba(0,0,0,0.00), rgba(0,0,0,0.18))',
   },
-  heroLabel: {
+
+  heroFallback: {
+    position: 'absolute',
+    inset: 0,
+    background:
+      'radial-gradient(ellipse at 30% 20%, rgba(184,149,106,0.22) 0%, transparent 55%), radial-gradient(ellipse at 70% 80%, rgba(26,20,16,0.10) 0%, transparent 60%)',
+    filter: 'blur(0px)',
+  },
+  heroFallbackOverlay: {
+    position: 'absolute',
+    inset: 0,
+    background:
+      'linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.02))',
+  },
+
+  heroBadge: {
     position: 'absolute',
     left: 14,
     bottom: 14,
-    padding: '0.35rem 0.65rem',
-    borderRadius: '999px',
-    background: 'rgba(255,255,255,0.85)',
+    padding: '0.42rem 0.78rem',
+    borderRadius: 999,
+    background: 'rgba(255,255,255,0.72)',
     border: '1px solid var(--border)',
-    color: 'var(--ink-2)',
-    fontSize: '0.75rem',
-    letterSpacing: '0.06em',
-    textTransform: 'uppercase',
-    fontWeight: 700,
-  },
-
-  section: { paddingTop: '2.75rem' },
-  sectionHead: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '1rem', marginBottom: '1.2rem', flexWrap: 'wrap' },
-  h2: { margin: 0, fontFamily: 'var(--font-display)', fontSize: '1.7rem', fontWeight: 400, color: 'var(--ink)' },
-  sub: { margin: '0.35rem 0 0', color: 'var(--ink-3)', fontSize: '0.92rem', lineHeight: 1.6 },
-
-  sliderControls: { display: 'flex', gap: '0.5rem' },
-  iconBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: '12px',
-    border: '1px solid var(--border)',
-    background: 'rgba(255,255,255,0.7)',
     backdropFilter: 'blur(12px)',
     WebkitBackdropFilter: 'blur(12px)',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'pointer',
-    color: 'var(--ink)',
-  },
-
-  slider: {
-    display: 'flex',
-    gap: '1rem',
-    overflowX: 'auto',
-    paddingBottom: '0.35rem',
-    scrollSnapType: 'x mandatory',
-    WebkitOverflowScrolling: 'touch',
-  },
-
-  card: {
-    flex: '0 0 260px',
-    scrollSnapAlign: 'start',
-    borderRadius: '16px',
-    border: '1px solid var(--border)',
-    background: 'rgba(255,255,255,0.72)',
-    overflow: 'hidden',
-    boxShadow: 'var(--shadow-sm)',
-  },
-  cardImgWrap: { width: '100%', height: 280, background: 'var(--bg-2)' },
-  cardImg: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' },
-  cardImgFallback: { width: '100%', height: '100%' },
-  cardBody: { padding: '0.95rem 1rem 1.05rem' },
-  cardName: { margin: 0, fontSize: '0.95rem', color: 'var(--ink)', fontWeight: 500, lineHeight: 1.35 },
-  cardMeta: { marginTop: '0.55rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--ink-3)' },
-  price: { color: 'var(--ink)', fontWeight: 600, fontSize: '0.92rem' },
-  metaDot: { opacity: 0.6 },
-  metaText: { fontSize: '0.82rem' },
-
-  cardSkeleton: {
-    flex: '0 0 260px',
-    height: 360,
-    borderRadius: '16px',
-    border: '1px solid var(--border)',
-    background: 'linear-gradient(90deg, rgba(0,0,0,0.04), rgba(0,0,0,0.07), rgba(0,0,0,0.04))',
-    backgroundSize: '200% 100%',
-    animation: 'shimmer 1.35s infinite',
-  },
-
-  emptyBox: {
-    width: '100%',
-    borderRadius: '16px',
-    border: '1px dashed var(--border-strong)',
-    padding: '1.5rem',
-    color: 'var(--ink-2)',
-    background: 'rgba(255,255,255,0.55)',
-  },
-  emptyTitle: { margin: 0, fontWeight: 700 },
-  emptySub: { margin: '0.45rem 0 0', color: 'var(--ink-3)', lineHeight: 1.6 },
-
-  linkMore: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    color: 'var(--accent)',
-    fontWeight: 700,
-    fontSize: '0.9rem',
-  },
-
-  grid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-    gap: '1rem',
-  },
-  gridCard: {
-    borderRadius: '16px',
-    border: '1px solid var(--border)',
-    background: 'rgba(255,255,255,0.72)',
-    overflow: 'hidden',
-    boxShadow: 'var(--shadow-sm)',
-  },
-  gridImgWrap: { width: '100%', aspectRatio: '4 / 5', background: 'var(--bg-2)' },
-  gridImg: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' },
-  gridImgFallback: { width: '100%', height: '100%' },
-  gridBody: { padding: '0.9rem 1rem 1.1rem' },
-  gridName: { margin: 0, fontSize: '0.92rem', fontWeight: 500, color: 'var(--ink)', lineHeight: 1.35 },
-  gridPrice: { margin: '0.5rem 0 0', color: 'var(--ink-2)', fontSize: '0.9rem' },
-
-  gridSkeleton: {
-    borderRadius: '16px',
-    border: '1px solid var(--border)',
-    background: 'linear-gradient(90deg, rgba(0,0,0,0.04), rgba(0,0,0,0.07), rgba(0,0,0,0.04))',
-    backgroundSize: '200% 100%',
-    animation: 'shimmer 1.35s infinite',
-    aspectRatio: '4 / 5',
-  },
-
-  centerCta: { display: 'flex', justifyContent: 'center', marginTop: '1.75rem' },
-  btnPrimarySoft: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '0.95rem 1.25rem',
-    borderRadius: '999px',
-    background: 'rgba(184,149,106,0.12)',
-    color: 'var(--accent-dark)',
-    border: '1px solid rgba(184,149,106,0.22)',
-    fontSize: '0.86rem',
-    letterSpacing: '0.08em',
+    fontSize: '0.70rem',
+    letterSpacing: '0.18em',
     textTransform: 'uppercase',
-    fontWeight: 700,
+    color: 'var(--ink)',
+    fontWeight: 400,
   },
 
-  chips: { display: 'flex', flexWrap: 'wrap', gap: '0.6rem' },
+  section: { padding: '2.25rem 0 0' },
+  sectionHead: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, marginBottom: 14 },
+  h2: {
+    fontFamily: 'var(--font-display)',
+    fontSize: '1.85rem',
+    fontWeight: 400,
+    letterSpacing: '-0.01em',
+    margin: 0,
+  },
+  sub: { margin: '0.3rem 0 0', color: 'var(--ink-3)', fontWeight: 300, lineHeight: 1.7 },
+
+  controls: { display: 'flex', gap: 8 },
+  ctrlBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 999,
+    border: '1px solid var(--border)',
+    background: 'rgba(255,255,255,0.55)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
+    display: 'grid',
+    placeItems: 'center',
+  },
+
+  noticeError: {
+    border: '1px solid rgba(220,38,38,0.25)',
+    background: 'rgba(255,255,255,0.65)',
+    borderRadius: 16,
+    padding: '0.9rem 1rem',
+    marginBottom: 14,
+  },
+  noticeSoft: {
+    border: '1px dashed var(--border-strong)',
+    background: 'rgba(255,255,255,0.60)',
+    borderRadius: 16,
+    padding: '0.9rem 1rem',
+    minWidth: 360,
+  },
+  noticeTitle: { margin: 0, color: 'rgba(185,28,28,1)', fontWeight: 400 },
+  noticeTitleSoft: { margin: 0, color: 'var(--ink)', fontWeight: 400 },
+  noticeText: { margin: '0.35rem 0 0', color: 'var(--ink-3)', lineHeight: 1.7, fontWeight: 300, fontSize: '0.95rem' },
+
+  slider: { display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 10, scrollSnapType: 'x mandatory' },
+  card: {
+    minWidth: 260,
+    maxWidth: 260,
+    borderRadius: 18,
+    overflow: 'hidden',
+    background: 'rgba(255,255,255,0.78)',
+    border: '1px solid var(--border)',
+    boxShadow: 'var(--shadow-sm)',
+    scrollSnapAlign: 'start',
+    transition: 'var(--transition)',
+  },
+  cardImgWrap: { width: '100%', height: 240, background: 'var(--bg-2)', overflow: 'hidden' },
+  cardImg: { width: '100%', height: '100%', objectFit: 'cover' },
+  cardImgFallback: { width: '100%', height: '100%' },
+  cardBody: { padding: '0.95rem 0.95rem 1.0rem' },
+  cardTop: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 },
+  cardName: { margin: 0, fontWeight: 400, color: 'var(--ink)', lineHeight: 1.2 },
+  cardPrice: { margin: 0, fontWeight: 400, color: 'var(--ink-2)' },
+  cardBottom: { marginTop: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
+  cardMeta: { color: 'var(--ink-3)', fontWeight: 300, fontSize: '0.92rem' },
+  cardCta: { color: 'var(--accent-dark)', fontWeight: 400, fontSize: '0.92rem', display: 'inline-flex', alignItems: 'center' },
+
+  cardSkel: { minWidth: 260, maxWidth: 260, height: 360, borderRadius: 18, border: '1px solid var(--border)' },
+
+  linkMore: { color: 'var(--accent-dark)', fontWeight: 400, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '0.78rem' },
+
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 16 },
+  gridCard: { borderRadius: 18, overflow: 'hidden', background: 'rgba(255,255,255,0.78)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' },
+  gridImgWrap: { display: 'block', width: '100%', height: 340, background: 'var(--bg-2)' },
+  gridImg: { width: '100%', height: '100%', objectFit: 'cover' },
+  gridImgFallback: { width: '100%', height: '100%' },
+  gridBody: { padding: '0.95rem 0.95rem 1.0rem' },
+  gridTop: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 },
+  gridName: { margin: 0, fontWeight: 400, lineHeight: 1.2 },
+  gridPrice: { margin: 0, fontWeight: 400, color: 'var(--ink-2)' },
+
+  btnDetails: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 999,
+    padding: '0.72rem 1.05rem',
+    background: 'transparent',
+    border: '1px solid var(--border-strong)',
+    color: 'var(--ink)',
+    fontWeight: 400,
+    letterSpacing: '0.06em',
+    textTransform: 'uppercase',
+    fontSize: '0.76rem',
+  },
+
+  gridSkel: { height: 460, borderRadius: 18, border: '1px solid var(--border)' },
+
+  centerCta: { display: 'flex', justifyContent: 'center', marginTop: 18 },
+  btnSoft: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 999,
+    padding: '0.88rem 1.18rem',
+    background: 'rgba(184,149,106,0.10)',
+    border: '1px solid rgba(184,149,106,0.25)',
+    color: 'var(--accent-dark)',
+    fontWeight: 400,
+    letterSpacing: '0.06em',
+    textTransform: 'uppercase',
+    fontSize: '0.78rem',
+  },
+
+  categoryPanel: {
+    borderRadius: 18,
+    background: 'rgba(255,255,255,0.65)',
+    border: '1px solid var(--border)',
+    boxShadow: 'var(--shadow-sm)',
+    padding: '1.1rem 1.1rem 1.2rem',
+  },
+  chips: { display: 'flex', flexWrap: 'wrap', gap: 10 },
   chip: {
-    padding: '0.6rem 0.9rem',
-    borderRadius: '999px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '0.62rem 0.95rem',
+    borderRadius: 999,
     border: '1px solid var(--border)',
     background: 'rgba(255,255,255,0.65)',
-    color: 'var(--ink-2)',
-    fontSize: '0.88rem',
+    color: 'var(--ink)',
+    fontWeight: 300,
   },
+
+  swatches: { display: 'inline-flex', alignItems: 'center', gap: 8 },
+  swatch: { width: 14, height: 14, borderRadius: 999, border: '1px solid rgba(0,0,0,0.10)', boxShadow: '0 1px 2px rgba(0,0,0,0.06)' },
+  swatchMore: { fontSize: '0.85rem', color: 'var(--ink-3)', fontWeight: 300, marginLeft: 2 },
 }
 
 export default Home

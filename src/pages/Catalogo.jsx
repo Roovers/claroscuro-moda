@@ -4,12 +4,44 @@ import { MagnifyingGlass, ArrowRight } from '@phosphor-icons/react'
 import { useProductos } from '../hooks/useProductos'
 import { CATEGORIAS } from '../constants/categorias'
 
+const useMediaQuery = (query) => {
+  const getMatches = () => {
+    if (typeof window === 'undefined' || !window.matchMedia) return false
+    return window.matchMedia(query).matches
+  }
+
+  const [matches, setMatches] = useState(getMatches)
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return
+
+    const mql = window.matchMedia(query)
+    const handler = (e) => setMatches(e.matches)
+
+    // set inicial por si cambió entre renders
+    setMatches(mql.matches)
+
+    if (mql.addEventListener) mql.addEventListener('change', handler)
+    else mql.addListener(handler)
+
+    return () => {
+      if (mql.removeEventListener) mql.removeEventListener('change', handler)
+      else mql.removeListener(handler)
+    }
+  }, [query])
+
+  return matches
+}
+
 const Catalogo = () => {
   const [params, setParams] = useSearchParams()
   const categoriaParam = params.get('categoria') || ''
 
   const [busqueda, setBusqueda] = useState('')
   const [orden, setOrden] = useState('recientes') // recientes | precio-asc | precio-desc | az
+
+  const isMd = useMediaQuery('(max-width: 980px)')
+  const isSm = useMediaQuery('(max-width: 560px)')
 
   // Trae productos (si hay categoria, query en Firestore; si no, trae todos activos)
   const { productos, cargando, error } = useProductos({
@@ -37,9 +69,9 @@ const Catalogo = () => {
 
     // Ordenar (front-only)
     if (orden === 'precio-asc') {
-      list.sort((a, b) => (Number(a.precio || 0) - Number(b.precio || 0)))
+      list.sort((a, b) => Number(a.precio || 0) - Number(b.precio || 0))
     } else if (orden === 'precio-desc') {
-      list.sort((a, b) => (Number(b.precio || 0) - Number(a.precio || 0)))
+      list.sort((a, b) => Number(b.precio || 0) - Number(a.precio || 0))
     } else if (orden === 'az') {
       list.sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es'))
     } else {
@@ -64,8 +96,10 @@ const Catalogo = () => {
     setParams({ categoria: value }, { replace: true })
   }
 
+  const gridCols = isSm ? '1fr' : isMd ? 'repeat(2, minmax(0, 1fr))' : 'repeat(3, minmax(0, 1fr))'
+
   return (
-    <main style={s.page}>
+    <main style={{ ...s.page, padding: isSm ? '2.25rem 1.25rem 4rem' : s.page.padding }}>
       {/* Header */}
       <section style={s.header} className="anim-fade-up">
         <div>
@@ -105,13 +139,13 @@ const Catalogo = () => {
 
       {/* Filtros */}
       <section style={s.filters} className="anim-fade-up" aria-label="Filtros de catálogo">
-        <div style={s.searchWrap}>
+        <div style={{ ...s.searchWrap, width: isSm ? '100%' : 'auto' }}>
           <MagnifyingGlass size={16} weight="bold" style={s.searchIcon} />
           <input
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             placeholder="Buscar por nombre..."
-            style={s.search}
+            style={{ ...s.search, width: isSm ? '100%' : s.search.width }}
             aria-label="Buscar por nombre"
           />
         </div>
@@ -137,7 +171,7 @@ const Catalogo = () => {
           <option value="az">Nombre: A–Z</option>
         </select>
 
-        <div style={s.count} aria-label="Cantidad de resultados">
+        <div style={{ ...s.count, marginLeft: isMd ? 0 : s.count.marginLeft }} aria-label="Cantidad de resultados">
           {cargando ? 'Cargando…' : `${productosProcesados.length} resultado(s)`}
         </div>
       </section>
@@ -150,7 +184,7 @@ const Catalogo = () => {
       )}
 
       {cargando ? (
-        <section style={s.grid} aria-label="Cargando productos">
+        <section style={{ ...s.grid, gridTemplateColumns: gridCols }} aria-label="Cargando productos">
           {Array.from({ length: 9 }).map((_, i) => (
             <div key={i} style={s.skeleton} className="anim-fade-in" />
           ))}
@@ -158,11 +192,16 @@ const Catalogo = () => {
       ) : productosProcesados.length === 0 ? (
         <section style={s.empty} className="anim-fade-up">
           <h2 style={s.emptyTitle}>No encontramos productos</h2>
-          <p style={s.emptySub}>
-            Probá con otra categoría o cambiá la búsqueda.
-          </p>
+          <p style={s.emptySub}>Probá con otra categoría o cambiá la búsqueda.</p>
           <div style={s.emptyActions}>
-            <button type="button" onClick={() => { setBusqueda(''); setOrden('recientes'); }} style={s.btnGhost}>
+            <button
+              type="button"
+              onClick={() => {
+                setBusqueda('')
+                setOrden('recientes')
+              }}
+              style={s.btnGhost}
+            >
               Limpiar filtros
             </button>
             <Link to="/" style={s.btnPrimary}>
@@ -171,30 +210,65 @@ const Catalogo = () => {
           </div>
         </section>
       ) : (
-        <section style={s.grid} aria-label="Listado de productos">
+        <section style={{ ...s.grid, gridTemplateColumns: gridCols }} aria-label="Listado de productos">
           {productosProcesados.map((p) => (
-            <Link key={p.id} to={`/producto/${p.id}`} style={s.card} className="anim-fade-up">
-              <div style={s.imgWrap}>
+            <article key={p.id} style={s.card} className="anim-fade-up">
+              <Link to={`/producto/${p.id}`} style={s.imgWrap}>
                 {p.imagenes?.[0] ? (
                   <img src={p.imagenes[0]} alt={p.nombre} style={s.img} loading="lazy" />
                 ) : (
                   <div style={s.imgFallback} />
                 )}
-              </div>
+              </Link>
 
               <div style={s.body}>
-                <p style={s.name}>{p.nombre}</p>
-                <div style={s.meta}>
+                <div style={s.topRow}>
+                  <p style={s.name}>{p.nombre}</p>
                   <span style={s.price}>${(p.precio || 0).toLocaleString('es-AR')}</span>
-                  <span style={s.dot}>•</span>
+                </div>
+
+                <div style={s.row}>
+                  <ColorSwatches colores={p?.variantes?.colores} />
                   <span style={s.cat}>{labelCategoria(p.categoria)}</span>
                 </div>
+
+                <div style={s.actions}>
+                  <Link to={`/producto/${p.id}`} style={s.btnDetails}>
+                    Ver detalles <ArrowRight size={14} weight="bold" style={{ marginLeft: 10 }} />
+                  </Link>
+                </div>
               </div>
-            </Link>
+            </article>
           ))}
         </section>
       )}
     </main>
+  )
+}
+
+const ColorSwatches = ({ colores }) => {
+  const list = Array.isArray(colores) ? colores : []
+  if (list.length === 0) return null
+
+  const max = 5
+  const shown = list.slice(0, max)
+  const rest = list.length - shown.length
+
+  return (
+    <div style={s.swatches} aria-label="Colores disponibles">
+      {shown.map((c, idx) => (
+        <span
+          key={`${c?.nombre || 'color'}-${idx}`}
+          title={c?.nombre || 'Color'}
+          style={{
+            ...s.swatch,
+            background: c?.hex || '#ddd',
+            borderColor: c?.hex ? 'rgba(0,0,0,0.10)' : 'rgba(0,0,0,0.06)',
+          }}
+        />
+      ))}
+      {rest > 0 ? <span style={s.swatchMore}>+{rest}</span> : null}
+    </div>
   )
 }
 
@@ -243,6 +317,7 @@ const s = {
     boxShadow: 'var(--shadow-sm)',
     fontSize: '0.9rem',
     fontWeight: 600,
+    textDecoration: 'none',
   },
 
   chipsWrap: { display: 'flex', flexWrap: 'wrap', gap: '0.6rem', marginBottom: '1.25rem' },
@@ -302,8 +377,9 @@ const s = {
     marginBottom: '1rem',
   },
 
-  grid: { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '1rem' },
+  grid: { display: 'grid', gap: '1rem' },
 
+  // Card (más parecida a tu ejemplo: info + swatches + CTA)
   card: {
     borderRadius: '16px',
     border: '1px solid var(--border)',
@@ -311,15 +387,48 @@ const s = {
     overflow: 'hidden',
     boxShadow: 'var(--shadow-sm)',
   },
-  imgWrap: { width: '100%', aspectRatio: '4 / 5', background: 'var(--bg-2)' },
+  imgWrap: { display: 'block', width: '100%', aspectRatio: '4 / 5', background: 'var(--bg-2)' },
   img: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' },
   imgFallback: { width: '100%', height: '100%' },
-  body: { padding: '0.9rem 1rem 1.1rem' },
-  name: { margin: 0, fontSize: '0.95rem', fontWeight: 500, color: 'var(--ink)', lineHeight: 1.35 },
-  meta: { marginTop: '0.55rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--ink-3)' },
-  price: { color: 'var(--ink)', fontWeight: 700, fontSize: '0.95rem' },
-  dot: { opacity: 0.6 },
-  cat: { fontSize: '0.82rem' },
+
+  body: { padding: '0.95rem 1rem 1.1rem' },
+  topRow: { display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline' },
+  name: { margin: 0, fontSize: '0.98rem', fontWeight: 600, color: 'var(--ink)', lineHeight: 1.35 },
+  price: { color: 'var(--ink)', fontWeight: 800, fontSize: '0.98rem' },
+
+  row: { marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  cat: { fontSize: '0.82rem', color: 'var(--ink-3)' },
+
+  actions: { marginTop: 14, display: 'flex', justifyContent: 'flex-start' },
+  btnDetails: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: '999px',
+    padding: '0.7rem 1rem',
+    border: '1px solid rgba(0,0,0,0.12)',
+    background: 'rgba(255,255,255,0.70)',
+    color: 'var(--ink)',
+    textDecoration: 'none',
+    fontWeight: 800,
+    letterSpacing: '0.02em',
+    fontSize: '0.9rem',
+  },
+
+  swatches: { display: 'inline-flex', alignItems: 'center', gap: 8 },
+  swatch: {
+    width: 14,
+    height: 14,
+    borderRadius: 999,
+    border: '1px solid rgba(0,0,0,0.10)',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.06)',
+  },
+  swatchMore: {
+    fontSize: '0.85rem',
+    color: 'var(--ink-3)',
+    fontWeight: 900,
+    marginLeft: 2,
+  },
 
   skeleton: {
     borderRadius: '16px',
@@ -362,20 +471,8 @@ const s = {
     fontSize: '0.86rem',
     letterSpacing: '0.06em',
     fontWeight: 600,
+    textDecoration: 'none',
   },
-}
-
-// Responsive mínimo (sin depender de CSS global)
-if (typeof window !== 'undefined' && window.matchMedia) {
-  if (window.matchMedia('(max-width: 980px)').matches) {
-    s.grid.gridTemplateColumns = 'repeat(2, minmax(0, 1fr))'
-    s.count.marginLeft = 0
-  }
-  if (window.matchMedia('(max-width: 560px)').matches) {
-    s.page.padding = '2.25rem 1.25rem 4rem'
-    s.grid.gridTemplateColumns = '1fr'
-    s.search.width = '100%'
-  }
 }
 
 export default Catalogo

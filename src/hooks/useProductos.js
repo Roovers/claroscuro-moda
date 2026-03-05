@@ -21,21 +21,27 @@ const COLECCION = 'productos'
  * Construye una query de Firestore para productos públicos.
  * IMPORTANTE:
  * - Si combinás where + orderBy, Firestore puede pedir índices compuestos.
- * - Si te llega el error de "requires an index", creás el índice desde el link que te da Firebase.
+ * - Si te llega el error de "requires an index", creás el índice desde el link que te da Firebase (aparece en Console).
  */
 const buildPublicQuery = ({ categoria, destacado, limite } = {}) => {
   const colRef = collection(db, COLECCION)
 
-  const constraints = [
-    where('activo', '==', true),
-    orderBy('creadoEn', 'desc'),
-  ]
+  const constraints = [where('activo', '==', true), orderBy('creadoEn', 'desc')]
 
   if (categoria) constraints.splice(1, 0, where('categoria', '==', categoria))
   if (destacado) constraints.splice(1, 0, where('destacado', '==', true))
   if (typeof limite === 'number' && limite > 0) constraints.push(limit(limite))
 
   return query(colRef, ...constraints)
+}
+
+const looksLikeIndexError = (err) => {
+  const msg = String(err?.message || err || '')
+  return (
+    msg.toLowerCase().includes('requires an index') ||
+    msg.toLowerCase().includes('failed-precondition') ||
+    msg.toLowerCase().includes('index')
+  )
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -82,7 +88,18 @@ export const useProductos = (filtros = {}) => {
       setProductos(data)
     } catch (err) {
       if (!mountedRef.current) return
-      setError(err?.message || 'Error al cargar productos')
+
+      // 🔥 CLAVE: esto hace que veas el link "Create index" en la consola
+      console.error('[Firestore] Error en useProductos (public list):', err)
+
+      if (looksLikeIndexError(err)) {
+        setError(
+          `${err?.message || 'La consulta requiere un índice compuesto.'}\n\n` +
+            'TIP: Mirá la Console del navegador y abrí el link "Create index" que te sugiere Firestore.'
+        )
+      } else {
+        setError(err?.message || 'Error al cargar productos')
+      }
     } finally {
       if (!mountedRef.current) return
       setCargando(false)
@@ -185,6 +202,7 @@ export const useProducto = (id) => {
         }
       } catch (err) {
         if (!mountedRef.current) return
+        console.error('[Firestore] Error en useProducto (by id):', err)
         setError(err?.message || 'Error al cargar producto')
       } finally {
         if (!mountedRef.current) return
@@ -226,6 +244,7 @@ export const useProductosAdmin = () => {
       setProductos(data)
     } catch (err) {
       if (!mountedRef.current) return
+      console.error('[Firestore] Error en useProductosAdmin (list):', err)
       setError(err?.message || 'Error al cargar productos (admin)')
     } finally {
       if (!mountedRef.current) return

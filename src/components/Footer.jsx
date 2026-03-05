@@ -1,110 +1,234 @@
 import { Link } from 'react-router-dom'
 import { WhatsappLogo, InstagramLogo, EnvelopeSimple } from '@phosphor-icons/react'
 import { CATEGORIAS } from '../constants/categorias'
+import logo from '../assets/logo1.png'
 
-const Footer = () => (
-  <footer style={f.root}>
-    <div style={f.glow} />
-    <div style={f.inner}>
-      <div style={f.brand}>
-        <p style={f.logo}>claroscuro</p>
-        <p style={f.tagline}>Prendas que definen tu estilo,<br/>estación a estación.</p>
-        <div style={f.socials}>
-          <a
-            href={`https://wa.me/${import.meta.env.VITE_WHATSAPP_NUMBER}`}
-            target="_blank" rel="noopener noreferrer"
-            style={f.socialBtn} aria-label="WhatsApp"
-          >
-            <WhatsappLogo size={18} weight="fill" />
-          </a>
-          <a href="#" style={f.socialBtn} aria-label="Instagram">
-            <InstagramLogo size={18} weight="fill" />
-          </a>
-          <a href="#" style={f.socialBtn} aria-label="Email">
-            <EnvelopeSimple size={18} weight="fill" />
-          </a>
+const Footer = () => {
+  const waNumber = import.meta.env.VITE_WHATSAPP_NUMBER
+  const instagramUrl = import.meta.env.VITE_INSTAGRAM_URL
+  const contactEmail = import.meta.env.VITE_CONTACT_EMAIL
+
+  const waHref = waNumber ? `https://wa.me/${waNumber}` : '#'
+  const igHref = instagramUrl || '#'
+  const mailHref = contactEmail ? `mailto:${contactEmail}` : '#'
+
+  return (
+    <footer style={s.root}>
+      <div style={s.inner}>
+        {/* BRAND */}
+        <div style={s.brand}>
+          <div style={s.brandTop}>
+            <span style={s.brandPill}>INDUMENTARIA & ACCESORIOS</span>
+          </div>
+
+          <p style={s.brandText}>
+            Estética cuidada, materiales nobles y una
+            <br />
+            selección pensada para durar.
+          </p>
+
+          <p style={s.brandTextSoft}>Armá tu carrito y finalizá por WhatsApp.</p>
+        </div>
+
+        {/* COLECCIÓN */}
+        <div style={s.col}>
+          <p style={s.colTitle}>COLECCIÓN</p>
+          {CATEGORIAS.filter((c) => c.value !== 'sale')
+            .slice(0, 5)
+            .map((c) => (
+              <Link key={c.value} to={`/catalogo?categoria=${c.value}`} style={s.link}>
+                {c.label}
+              </Link>
+            ))}
+        </div>
+
+        {/* NAVEGACIÓN */}
+        <div style={s.col}>
+          <p style={s.colTitle}>NAVEGACIÓN</p>
+          <Link to="/catalogo" style={s.link}>
+            Catálogo
+          </Link>
+          <Link to="/carrito" style={s.link}>
+            Carrito
+          </Link>
+          <Link to="/contacto" style={s.link}>
+            Contacto
+          </Link>
+        </div>
+
+        {/* ATENCIÓN */}
+        <div style={s.col}>
+          <p style={s.colTitle}>ATENCIÓN</p>
+
+          <div style={s.iconRow}>
+            <a
+              href={waHref}
+              target={waNumber ? '_blank' : undefined}
+              rel={waNumber ? 'noopener noreferrer' : undefined}
+              style={s.iconBtn}
+              aria-label="WhatsApp"
+              title="WhatsApp"
+            >
+              <WhatsappLogo size={18} weight="regular" />
+            </a>
+
+            <a
+              href={igHref}
+              target={instagramUrl ? '_blank' : undefined}
+              rel={instagramUrl ? 'noopener noreferrer' : undefined}
+              style={s.iconBtn}
+              aria-label="Instagram"
+              title="Instagram"
+            >
+              <InstagramLogo size={18} weight="regular" />
+            </a>
+
+            <a href={mailHref} style={s.iconBtn} aria-label="Email" title="Email">
+              <EnvelopeSimple size={18} weight="regular" />
+            </a>
+          </div>
+
+          <p style={s.note}>
+            Sin pagos online. Confirmación de stock y coordinación del pedido por WhatsApp.
+          </p>
         </div>
       </div>
 
-      <div style={f.col}>
-        <p style={f.colTitle}>Colección</p>
-        {CATEGORIAS.slice(0, 5).map(c => (
-          <Link key={c.value} to={`/catalogo?categoria=${c.value}`} style={f.link}>{c.label}</Link>
-        ))}
+      {/* Bottom */}
+      <div style={s.bottom}>
+        <div style={s.bottomLine} />
+        <p style={s.copy}>© {new Date().getFullYear()} claroscuro. Todos los derechos reservados.</p>
       </div>
+    </footer>
+  )
+}
 
-      <div style={f.col}>
-        <p style={f.colTitle}>Más</p>
-        {CATEGORIAS.slice(5).map(c => (
-          <Link key={c.value} to={`/catalogo?categoria=${c.value}`} style={f.link}>{c.label}</Link>
-        ))}
-        <Link to="/carrito" style={f.link}>Carrito</Link>
-      </div>
-
-      <div style={f.col}>
-        <p style={f.colTitle}>Contacto</p>
-        <a
-          href={`https://wa.me/${import.meta.env.VITE_WHATSAPP_NUMBER}`}
-          target="_blank" rel="noopener noreferrer"
-          style={{ ...f.link, display: 'flex', alignItems: 'center', gap: '0.4rem' }}
-        >
-          <WhatsappLogo size={14} weight="fill" /> Escribinos
-        </a>
-      </div>
-    </div>
-
-    <div style={f.bottom}>
-      <p style={f.copy}>© {new Date().getFullYear()} claroscuro. Todos los derechos reservados.</p>
-    </div>
-  </footer>
-)
-
-const f = {
+const s = {
   root: {
-    background: 'var(--ink)', color: 'var(--bg)',
-    fontFamily: 'var(--font-body)', position: 'relative', overflow: 'hidden',
-    marginTop: '6rem',
+    marginTop: '5.5rem',
+    background:
+      'radial-gradient(900px 340px at 20% 10%, rgba(184,149,106,0.08), transparent 55%), linear-gradient(180deg, rgba(12,11,10,0.98), rgba(8,7,6,1))',
+    borderTop: '1px solid rgba(255,255,255,0.06)',
+    color: 'rgba(255,255,255,0.78)',
   },
-  glow: {
-    position: 'absolute', top: 0, left: '50%',
-    transform: 'translateX(-50%)',
-    width: '600px', height: '1px',
-    background: 'linear-gradient(90deg, transparent, var(--accent), transparent)',
-  },
+
   inner: {
-    display: 'flex', gap: '4rem', flexWrap: 'wrap',
-    padding: '4rem 2.5rem 2.5rem', maxWidth: '1200px', margin: '0 auto',
+    maxWidth: 1120,
+    margin: '0 auto',
+    padding: '2.6rem 2.5rem 2.0rem',
+    display: 'grid',
+    gridTemplateColumns: '1.6fr 1fr 1fr 1.1fr',
+    gap: '2.2rem',
+    alignItems: 'start',
   },
-  brand: { flex: '1 1 220px', minWidth: '180px' },
-  logo: {
-    fontFamily: 'var(--font-display)', fontSize: '1.8rem',
-    fontWeight: 400, letterSpacing: '0.06em',
-    color: 'var(--bg)', marginBottom: '0.75rem',
+
+  brand: { minWidth: 260 },
+  brandTop: { display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' },
+
+  logoImg: {
+    height: 100, 
+    width: 'auto',
+    opacity: 0.92,
+    filter: 'grayscale(0%)',
   },
-  tagline: {
-    fontSize: '0.82rem', color: 'rgba(247,244,239,0.5)',
-    fontWeight: 300, lineHeight: 1.7, marginBottom: '1.5rem',
+
+  brandPill: {
+    fontSize: '0.68rem',
+    letterSpacing: '0.24em',
+    textTransform: 'uppercase',
+    fontWeight: 300,
+    padding: '0.30rem 0.62rem',
+    borderRadius: 999,
+    border: '1px solid rgba(255,255,255,0.10)',
+    background: 'rgba(255,255,255,0.04)',
+    color: 'rgba(184,149,106,0.95)',
   },
-  socials: { display: 'flex', gap: '0.5rem' },
-  socialBtn: {
-    width: '36px', height: '36px', borderRadius: '8px',
-    background: 'rgba(255,255,255,0.08)',
-    border: '1px solid rgba(255,255,255,0.12)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    color: 'var(--accent)', transition: 'background var(--transition)',
+
+  brandText: {
+    margin: '1.0rem 0 0',
+    fontWeight: 300,
+    lineHeight: 1.9,
+    fontSize: '0.98rem',
+    color: 'rgba(255,255,255,0.58)',
   },
-  col: { flex: '1 1 130px', display: 'flex', flexDirection: 'column', gap: '0.6rem', minWidth: '110px' },
+  brandTextSoft: {
+    margin: '0.55rem 0 0',
+    fontWeight: 300,
+    lineHeight: 1.9,
+    fontSize: '0.98rem',
+    color: 'rgba(255,255,255,0.48)',
+  },
+
+  col: { display: 'flex', flexDirection: 'column', gap: 10, minWidth: 140 },
+
   colTitle: {
-    fontSize: '0.7rem', fontWeight: 500,
-    letterSpacing: '0.14em', textTransform: 'uppercase',
-    color: 'var(--accent)', marginBottom: '0.25rem',
+    margin: 0,
+    fontSize: '0.70rem',
+    letterSpacing: '0.22em',
+    textTransform: 'uppercase',
+    fontWeight: 300,
+    color: 'rgba(184,149,106,0.92)',
   },
-  link: { fontSize: '0.85rem', color: 'rgba(247,244,239,0.55)', lineHeight: 1.9 },
+
+  link: {
+    textDecoration: 'none',
+    color: 'rgba(255,255,255,0.54)',
+    fontWeight: 300,
+    fontSize: '0.95rem',
+    lineHeight: 1.6,
+    width: 'fit-content',
+  },
+
+  iconRow: { display: 'flex', gap: 10, alignItems: 'center', marginTop: 2 },
+  iconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 999,
+    border: '1px solid rgba(255,255,255,0.10)',
+    background: 'rgba(255,255,255,0.04)',
+    display: 'grid',
+    placeItems: 'center',
+    color: 'rgba(255,255,255,0.70)',
+    textDecoration: 'none',
+  },
+
+  note: {
+    margin: '0.95rem 0 0',
+    fontSize: '0.92rem',
+    lineHeight: 1.75,
+    color: 'rgba(255,255,255,0.42)',
+    fontWeight: 300,
+    maxWidth: 320,
+  },
+
+  mini: {
+    margin: '0.85rem 0 0',
+    fontSize: '0.82rem',
+    fontWeight: 300,
+    color: 'rgba(255,255,255,0.34)',
+  },
+
   bottom: {
-    borderTop: '1px solid rgba(255,255,255,0.07)',
-    padding: '1.25rem 2.5rem', maxWidth: '1200px', margin: '0 auto',
+    maxWidth: 1120,
+    margin: '0 auto',
+    padding: '0 2.5rem 1.5rem',
   },
-  copy: { fontSize: '0.72rem', color: 'rgba(247,244,239,0.3)' },
+
+  bottomLine: {
+    height: 1,
+    width: '100%',
+    margin: '0.3rem 0 1.0rem',
+    background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent)',
+  },
+
+  copy: {
+    margin: 0,
+    textAlign: 'center',
+    fontSize: '0.86rem',
+    fontWeight: 300,
+    color: 'rgba(255,255,255,0.38)',
+    letterSpacing: '0.02em',
+  },
 }
 
 export default Footer

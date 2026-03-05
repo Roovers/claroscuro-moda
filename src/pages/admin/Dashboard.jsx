@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useProductosAdmin } from '../../hooks/useProductos'
 import { CATEGORIAS } from '../../constants/categorias'
@@ -12,6 +12,8 @@ import {
   CheckCircle,
   XCircle,
   Star,
+  Package,
+  Image as ImageIcon,
 } from '@phosphor-icons/react'
 
 const Dashboard = () => {
@@ -80,8 +82,24 @@ const Dashboard = () => {
       <aside style={s.sidebar}>
         <div style={s.logo}>claroscuro</div>
 
+        {/* ✅ Menú real con 2 opciones */}
         <nav style={s.nav}>
-          <span style={s.navItemActive}>Productos</span>
+          <NavLink
+            to="/admin"
+            end
+            style={({ isActive }) => (isActive ? { ...s.navItem, ...s.navItemActive } : s.navItem)}
+          >
+            <Package size={18} weight="bold" style={{ marginRight: 10 }} />
+            Gestión de Productos
+          </NavLink>
+
+          <NavLink
+            to="/admin/home"
+            style={({ isActive }) => (isActive ? { ...s.navItem, ...s.navItemActive } : s.navItem)}
+          >
+            <ImageIcon size={18} weight="bold" style={{ marginRight: 10 }} />
+            Gestionar Banner Principal
+          </NavLink>
         </nav>
 
         <div style={s.sidebarFooter}>
@@ -97,7 +115,7 @@ const Dashboard = () => {
         {/* Header */}
         <div style={s.header}>
           <div>
-            <h1 style={s.title}>Productos</h1>
+            <h1 style={s.title}>Gestión de Productos</h1>
             <p style={s.subtitle}>Gestioná tu catálogo (crear, editar, activar/desactivar).</p>
           </div>
 
@@ -154,9 +172,7 @@ const Dashboard = () => {
               </option>
             ))}
             {/* Seguridad por si aún no estaba en constants */}
-            {!CATEGORIAS.some((c) => c.value === 'calzado') && (
-              <option value="calzado">Calzado</option>
-            )}
+            {!CATEGORIAS.some((c) => c.value === 'calzado') && <option value="calzado">Calzado</option>}
           </select>
 
           <select
@@ -324,15 +340,57 @@ const Dashboard = () => {
 }
 
 const s = {
-  root: { display: 'flex', minHeight: '100vh', background: '#f5f5f0', fontFamily: "'Helvetica Neue', Arial, sans-serif" },
+  root: {
+    display: 'flex',
+    minHeight: '100vh',
+    background: '#f5f5f0',
+    fontFamily: "'Helvetica Neue', Arial, sans-serif",
+  },
 
   // Sidebar
-  sidebar: { width: '220px', background: '#1a1a1a', color: '#fff', display: 'flex', flexDirection: 'column', padding: '2rem 1.5rem', position: 'sticky', top: 0, height: '100vh' },
-  logo: { fontFamily: 'Georgia, serif', fontSize: '1.4rem', letterSpacing: '0.05em', marginBottom: '2.5rem' },
-  nav: { flex: 1 },
-  navItemActive: { display: 'block', padding: '0.6rem 0.75rem', background: 'rgba(255,255,255,0.1)', borderRadius: '6px', fontSize: '0.9rem' },
+  sidebar: {
+    width: '240px',
+    background: '#1a1a1a',
+    color: '#fff',
+    display: 'flex',
+    flexDirection: 'column',
+    padding: '2rem 1.5rem',
+    position: 'sticky',
+    top: 0,
+    height: '100vh',
+  },
+  logo: {
+    fontFamily: 'Georgia, serif',
+    fontSize: '1.4rem',
+    letterSpacing: '0.05em',
+    marginBottom: '2.0rem',
+  },
+  nav: { flex: 1, display: 'grid', gap: 8 },
+
+  navItem: {
+    display: 'flex',
+    alignItems: 'center',
+    padding: '0.65rem 0.75rem',
+    borderRadius: '10px',
+    fontSize: '0.92rem',
+    color: '#fff',
+    textDecoration: 'none',
+    border: '1px solid rgba(255,255,255,0.10)',
+    background: 'transparent',
+  },
+  navItemActive: {
+    background: 'rgba(255,255,255,0.10)',
+    border: '1px solid rgba(255,255,255,0.18)',
+  },
+
   sidebarFooter: { borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '1rem' },
-  emailText: { display: 'block', fontSize: '0.75rem', color: '#aaa', marginBottom: '0.75rem', wordBreak: 'break-all' },
+  emailText: {
+    display: 'block',
+    fontSize: '0.75rem',
+    color: '#aaa',
+    marginBottom: '0.75rem',
+    wordBreak: 'break-all',
+  },
   logoutBtn: {
     display: 'flex',
     alignItems: 'center',
@@ -342,14 +400,21 @@ const s = {
     color: '#fff',
     padding: '0.5rem 0.75rem',
     cursor: 'pointer',
-    borderRadius: '6px',
+    borderRadius: '10px',
     fontSize: '0.82rem',
     width: '100%',
   },
 
   // Main
   main: { flex: 1, padding: '2rem 2.5rem', overflowX: 'auto' },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '1.25rem', flexWrap: 'wrap' },
+  header: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: '1rem',
+    marginBottom: '1.25rem',
+    flexWrap: 'wrap',
+  },
   title: { margin: '0 0 0.25rem', fontSize: '1.8rem', fontWeight: 700, color: '#1a1a1a' },
   subtitle: { margin: 0, color: '#666', fontSize: '0.9rem' },
 
@@ -368,27 +433,100 @@ const s = {
   },
 
   // Stats
-  statsRow: { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' },
-  statCard: { background: '#fff', borderRadius: '12px', padding: '0.9rem 1rem', boxShadow: '0 1px 10px rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.04)' },
-  statLabel: { margin: 0, fontSize: '0.75rem', color: '#777', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700 },
+  statsRow: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+    gap: '0.75rem',
+    marginBottom: '1.25rem',
+  },
+  statCard: {
+    background: '#fff',
+    borderRadius: '12px',
+    padding: '0.9rem 1rem',
+    boxShadow: '0 1px 10px rgba(0,0,0,0.05)',
+    border: '1px solid rgba(0,0,0,0.04)',
+  },
+  statLabel: {
+    margin: 0,
+    fontSize: '0.75rem',
+    color: '#777',
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase',
+    fontWeight: 700,
+  },
   statValue: { margin: '0.35rem 0 0', fontSize: '1.5rem', fontWeight: 800, color: '#1a1a1a' },
 
   // Filtros
   filtros: { display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', alignItems: 'center', flexWrap: 'wrap' },
   searchWrap: { position: 'relative', display: 'flex', alignItems: 'center' },
   searchIcon: { position: 'absolute', left: 12, color: '#888' },
-  inputBusqueda: { padding: '0.65rem 0.9rem 0.65rem 2.25rem', border: '1px solid #ddd', borderRadius: '10px', fontSize: '0.9rem', width: '280px', background: '#fff', outline: 'none' },
-  select: { padding: '0.65rem 0.9rem', border: '1px solid #ddd', borderRadius: '10px', fontSize: '0.9rem', background: '#fff', outline: 'none', cursor: 'pointer' },
-  btnGhost: { background: 'transparent', border: '1px solid #ddd', padding: '0.62rem 0.9rem', borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem' },
+  inputBusqueda: {
+    padding: '0.65rem 0.9rem 0.65rem 2.25rem',
+    border: '1px solid #ddd',
+    borderRadius: '10px',
+    fontSize: '0.9rem',
+    width: '280px',
+    background: '#fff',
+    outline: 'none',
+  },
+  select: {
+    padding: '0.65rem 0.9rem',
+    border: '1px solid #ddd',
+    borderRadius: '10px',
+    fontSize: '0.9rem',
+    background: '#fff',
+    outline: 'none',
+    cursor: 'pointer',
+  },
+  btnGhost: {
+    background: 'transparent',
+    border: '1px solid #ddd',
+    padding: '0.62rem 0.9rem',
+    borderRadius: '10px',
+    cursor: 'pointer',
+    fontSize: '0.85rem',
+  },
 
   // Table
-  tableWrapper: { background: '#fff', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 1px 12px rgba(0,0,0,0.06)', border: '1px solid rgba(0,0,0,0.04)' },
+  tableWrapper: {
+    background: '#fff',
+    borderRadius: '12px',
+    overflow: 'hidden',
+    boxShadow: '0 1px 12px rgba(0,0,0,0.06)',
+    border: '1px solid rgba(0,0,0,0.04)',
+  },
   table: { width: '100%', borderCollapse: 'collapse' },
-  th: { textAlign: 'left', padding: '0.9rem 1rem', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#777', borderBottom: '1px solid #f0f0f0', background: '#fafafa' },
-  thRight: { textAlign: 'right', padding: '0.9rem 1rem', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#777', borderBottom: '1px solid #f0f0f0', background: '#fafafa' },
+  th: {
+    textAlign: 'left',
+    padding: '0.9rem 1rem',
+    fontSize: '0.75rem',
+    fontWeight: 800,
+    textTransform: 'uppercase',
+    letterSpacing: '0.08em',
+    color: '#777',
+    borderBottom: '1px solid #f0f0f0',
+    background: '#fafafa',
+  },
+  thRight: {
+    textAlign: 'right',
+    padding: '0.9rem 1rem',
+    fontSize: '0.75rem',
+    fontWeight: 800,
+    textTransform: 'uppercase',
+    letterSpacing: '0.08em',
+    color: '#777',
+    borderBottom: '1px solid #f0f0f0',
+    background: '#fafafa',
+  },
   tr: { borderBottom: '1px solid #f5f5f5' },
   td: { padding: '0.85rem 1rem', fontSize: '0.92rem', color: '#1a1a1a', verticalAlign: 'middle' },
-  tdRight: { padding: '0.85rem 1rem', fontSize: '0.92rem', color: '#1a1a1a', verticalAlign: 'middle', textAlign: 'right' },
+  tdRight: {
+    padding: '0.85rem 1rem',
+    fontSize: '0.92rem',
+    color: '#1a1a1a',
+    verticalAlign: 'middle',
+    textAlign: 'right',
+  },
 
   linkName: {
     background: 'transparent',
@@ -402,22 +540,92 @@ const s = {
   },
 
   thumbnail: { width: '52px', height: '52px', objectFit: 'cover', borderRadius: '10px', display: 'block' },
-  noImage: { width: '52px', height: '52px', background: '#f0f0f0', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', color: '#aaa' },
+  noImage: {
+    width: '52px',
+    height: '52px',
+    background: '#f0f0f0',
+    borderRadius: '10px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '0.65rem',
+    color: '#aaa',
+  },
 
   badge: { background: '#f3f3f3', padding: '0.25rem 0.65rem', borderRadius: '999px', fontSize: '0.78rem', color: '#333' },
-  badgeStar: { display: 'inline-flex', alignItems: 'center', background: '#fff7e6', color: '#a05a00', padding: '0.25rem 0.65rem', borderRadius: '999px', fontSize: '0.78rem', border: '1px solid #ffe3b5' },
+  badgeStar: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    background: '#fff7e6',
+    color: '#a05a00',
+    padding: '0.25rem 0.65rem',
+    borderRadius: '999px',
+    fontSize: '0.78rem',
+    border: '1px solid #ffe3b5',
+  },
   muted: { color: '#999' },
 
-  badgeActivo: { display: 'inline-flex', alignItems: 'center', background: '#e8f5e9', color: '#2e7d32', border: '1px solid #c8e6c9', padding: '0.35rem 0.75rem', borderRadius: '999px', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 800 },
-  badgeInactivo: { display: 'inline-flex', alignItems: 'center', background: '#fce4ec', color: '#c62828', border: '1px solid #f8bbd0', padding: '0.35rem 0.75rem', borderRadius: '999px', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 800 },
+  badgeActivo: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    background: '#e8f5e9',
+    color: '#2e7d32',
+    border: '1px solid #c8e6c9',
+    padding: '0.35rem 0.75rem',
+    borderRadius: '999px',
+    fontSize: '0.78rem',
+    cursor: 'pointer',
+    fontWeight: 800,
+  },
+  badgeInactivo: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    background: '#fce4ec',
+    color: '#c62828',
+    border: '1px solid #f8bbd0',
+    padding: '0.35rem 0.75rem',
+    borderRadius: '999px',
+    fontSize: '0.78rem',
+    cursor: 'pointer',
+    fontWeight: 800,
+  },
 
   acciones: { display: 'inline-flex', gap: '0.5rem' },
-  btnEdit: { background: 'transparent', border: '1px solid #ddd', width: 38, height: 38, borderRadius: '10px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' },
-  btnDelete: { background: 'transparent', border: '1px solid #ffcdd2', color: '#c62828', width: 38, height: 38, borderRadius: '10px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' },
+  btnEdit: {
+    background: 'transparent',
+    border: '1px solid #ddd',
+    width: 38,
+    height: 38,
+    borderRadius: '10px',
+    cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnDelete: {
+    background: 'transparent',
+    border: '1px solid #ffcdd2',
+    color: '#c62828',
+    width: 38,
+    height: 38,
+    borderRadius: '10px',
+    cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   // States
   loading: { padding: '3rem', textAlign: 'center', color: '#666' },
-  empty: { padding: '4rem 1.5rem', textAlign: 'center', color: '#666', background: '#fff', borderRadius: '12px', boxShadow: '0 1px 12px rgba(0,0,0,0.06)', border: '1px solid rgba(0,0,0,0.04)' },
+  empty: {
+    padding: '4rem 1.5rem',
+    textAlign: 'center',
+    color: '#666',
+    background: '#fff',
+    borderRadius: '12px',
+    boxShadow: '0 1px 12px rgba(0,0,0,0.06)',
+    border: '1px solid rgba(0,0,0,0.04)',
+  },
   emptyTitle: { margin: 0, fontSize: '1.15rem', fontWeight: 800, color: '#1a1a1a' },
   emptySub: { margin: '0.5rem 0 1.25rem', fontSize: '0.92rem', color: '#666', lineHeight: 1.5 },
   btnGhostLg: { background: 'transparent', border: '1px solid #ddd', padding: '0.75rem 1.1rem', borderRadius: '12px', cursor: 'pointer', fontSize: '0.9rem' },

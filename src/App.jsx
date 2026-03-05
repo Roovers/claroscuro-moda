@@ -1,9 +1,10 @@
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './context/AuthContext'
 
 // Layout público
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
+import WhatsAppFloatingButton from './components/WhatsAppFloatingButton'
 
 // Páginas públicas
 import Home from './pages/Home'
@@ -16,6 +17,7 @@ import Contacto from './pages/Contacto'
 import Login from './pages/admin/Login'
 import Dashboard from './pages/admin/Dashboard'
 import ProductoForm from './pages/admin/ProductoForm'
+import HomeSettings from './pages/admin/HomeSettings'
 
 // Ruta protegida
 const RutaProtegida = ({ children }) => {
@@ -24,19 +26,17 @@ const RutaProtegida = ({ children }) => {
   return esAdmin ? children : <Navigate to="/admin/login" replace />
 }
 
-// Layout público (con Navbar/Footer)
+// Layout público (con Navbar/Footer + botón flotante)
 const PublicLayout = ({ children }) => (
   <>
     <Navbar />
     {children}
     <Footer />
+    <WhatsAppFloatingButton />
   </>
 )
 
 const App = () => {
-  const location = useLocation()
-  const isAdminRoute = location.pathname.startsWith('/admin')
-
   return (
     <>
       <Routes>
@@ -98,6 +98,16 @@ const App = () => {
           }
         />
 
+        {/* ✅ NUEVA RUTA: configuración del HOME */}
+        <Route
+          path="/admin/home"
+          element={
+            <RutaProtegida>
+              <HomeSettings />
+            </RutaProtegida>
+          }
+        />
+
         <Route
           path="/admin/nuevo"
           element={
@@ -119,9 +129,6 @@ const App = () => {
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-
-      {/* Evita warning por variable no usada si en el futuro querés usar isAdminRoute */}
-      {isAdminRoute ? null : null}
     </>
   )
 }
