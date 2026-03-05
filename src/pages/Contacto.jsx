@@ -4,6 +4,8 @@ const Contacto = () => {
   const numero = import.meta.env.VITE_WHATSAPP_NUMBER || ''
   const waLink = numero ? `https://wa.me/${numero}` : '#'
 
+  const instagram = import.meta.env.VITE_INSTAGRAM_URL || ''
+
   return (
     <main style={s.main} className="anim-fade-up">
       <section style={s.hero}>
@@ -34,24 +36,6 @@ const Contacto = () => {
 
       <section style={s.grid}>
         {/* Card 1: WhatsApp / Tel */}
-        <div style={s.card}>
-          <div style={s.cardIcon}>
-            <Phone size={18} weight="bold" />
-          </div>
-          <h2 style={s.cardTitle}>WhatsApp</h2>
-          <p style={s.cardText}>
-            {numero ? (
-              <>
-                Número: <strong>{numero}</strong>
-              </>
-            ) : (
-              <>
-                Configurá el número en tu <strong>.env</strong>.
-              </>
-            )}
-          </p>
-          <p style={s.cardHint}>Tip: podés usar el carrito y enviar el pedido con el detalle automáticamente.</p>
-        </div>
 
         {/* Card 2: Horarios */}
         <div style={s.card}>
@@ -70,7 +54,7 @@ const Contacto = () => {
           </div>
           <h2 style={s.cardTitle}>Ubicación</h2>
           <p style={s.cardText}>Coordinamos retiro o envío.</p>
-          <p style={s.cardHint}>Agregá acá tu dirección o zona si el cliente lo pide.</p>
+          <p style={s.cardHint}>Buenos Aires, Argentina </p>
         </div>
 
         {/* Card 4: Redes */}
@@ -81,11 +65,10 @@ const Contacto = () => {
           <h2 style={s.cardTitle}>Redes</h2>
           <p style={s.cardText}>Seguinos para ver novedades y lanzamientos.</p>
           <a
-            href="#"
+            href={instagram}
+            target="_blank"
+            rel="noopener noreferrer"
             style={s.cardLink}
-            onClick={(e) => e.preventDefault()}
-            aria-label="Instagram"
-            title="Reemplazá este link por el Instagram real"
           >
             Ir a Instagram →
           </a>
