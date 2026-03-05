@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { ShoppingBag, List, X, CaretDown } from '@phosphor-icons/react'
 import { useCarrito } from '../context/CarritoContext'
 import { CATEGORIAS } from '../constants/categorias'
-import logo from '../assets/logo1.png'
+import logo from '../assets/logo3.png'
 
 const useIsMobile = (bp = 768) => {
   const [v, setV] = useState(() => typeof window !== 'undefined' ? window.innerWidth < bp : false)
