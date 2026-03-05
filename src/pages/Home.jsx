@@ -5,6 +5,8 @@ import { doc, getDoc } from 'firebase/firestore'
 import { db } from '../firebase/config'
 import { useProductos } from '../hooks/useProductos'
 import { CATEGORIAS } from '../constants/categorias'
+import brandBg from '../assets/brand.jpg'
+
 
 const DEFAULT_HERO = {
   heroTitle: 'Una colección minimal, cuidada y atemporal.',
@@ -119,6 +121,7 @@ const ProductCard = ({ p, size = 'md' }) => {
 /* ─────────────────────────────────────────────────────────────────────────── */
 
 const Home = () => {
+  const brandRef = useRef(null)
   /* ── Hero settings */
   const [hero, setHero] = useState(DEFAULT_HERO)
   const [heroLoading, setHeroLoading] = useState(true)
@@ -146,6 +149,27 @@ const Home = () => {
     run()
   }, [])
 
+  useEffect(() => {
+    const el = brandRef.current
+    if (!el) return
+
+    const onScroll = () => {
+      const rect = el.getBoundingClientRect()
+
+      // 0 cuando el section todavía está abajo / 1 cuando ya entró bastante
+      const progress = Math.min(1, Math.max(0, 1 - rect.top / window.innerHeight))
+
+      // mueve la foto verticalmente (ajustá estos valores si querés)
+      const y = 50 + progress * 12 // 50% -> 62%
+
+      el.style.backgroundPosition = `center ${y}%`
+    }
+
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
   /* ── Productos */
   const { productos: destacados, cargando: cargandoDestacados } = useProductos({
     destacado: true,
@@ -160,6 +184,7 @@ const Home = () => {
 
   /* ── Hero words split for editorial treatment */
   const heroWords = hero.heroTitle.split(' ')
+
 
   return (
     <main style={s.page}>
@@ -291,7 +316,7 @@ const Home = () => {
       <section style={s.section}>
         <div style={s.sectionHeader}>
           <div style={s.sectionTitleGroup}>
-            <span style={s.sectionEyebrow}>Selección curada</span>
+            <span style={s.sectionEyebrow}>Selección Exclusiva</span>
             <h2 style={s.sectionTitle}>Destacados</h2>
           </div>
           <Link to="/catalogo" style={s.sectionCta}>
@@ -419,22 +444,26 @@ const Home = () => {
       {/* ══════════════════════════════════════════════════════════
           SECTION 7 — BRAND STATEMENT
       ══════════════════════════════════════════════════════════ */}
-      <section style={s.brandStatement}>
+      <section ref={brandRef} style={s.brandStatement}>
+        <div style={s.brandOverlay} />
+        <div style={s.brandGrain} />
         <div style={s.brandStatementInner}>
-          <span style={s.brandStatementEyebrow}>Nuestra filosofía</span>
-          <blockquote style={s.brandStatementQuote}>
-            "Prendas pensadas para durar,<br />
-            <em>estética que trasciende temporadas.</em>"
-          </blockquote>
-          <div style={s.brandStatementRule} />
-          <p style={s.brandStatementSub}>
-            Cada pieza es seleccionada con criterio. Sin fast fashion, sin descuidos.
-            Armá tu carrito y coordiná por WhatsApp — simple, directo, sin intermediarios.
-          </p>
-          <Link to="/contacto" style={s.btnOutlineLight}>
-            Hablá con nosotros
-            <ArrowRight size={14} weight="bold" style={{ marginLeft: 8 }} />
-          </Link>
+          <div style={s.brandPanel}>
+            <span style={s.brandStatementEyebrow}>Nuestra filosofía</span>
+            <blockquote style={s.brandStatementQuote}>
+              "Prendas pensadas para durar,<br />
+              <em>estética que trasciende temporadas.</em>"
+            </blockquote>
+            <div style={s.brandStatementRule} />
+            <p style={s.brandStatementSub}>
+              Cada pieza es seleccionada con criterio. Sin fast fashion, sin descuidos.
+              Armá tu carrito y coordiná por WhatsApp — simple, directo, sin intermediarios.
+            </p>
+            <Link to="/contacto" style={s.btnOutlineLight}>
+              Hablá con nosotros
+              <ArrowRight size={14} weight="bold" style={{ marginLeft: 8 }} />
+            </Link>
+          </div>
         </div>
       </section>
 
@@ -558,6 +587,27 @@ const s = {
     zIndex: 1,
   },
 
+  brandOverlay: {
+    position: 'absolute',
+    inset: 0,
+    background: `
+    radial-gradient(1200px 500px at 50% 35%, rgba(0,0,0,0.15), transparent 60%),
+    linear-gradient(to bottom, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.55) 70%, rgba(0,0,0,0.65) 100%)
+  `,
+  },
+  brandGrain: {
+    position: 'absolute',
+    inset: 0,
+    pointerEvents: 'none',
+    opacity: 0.08,
+    mixBlendMode: 'overlay',
+    backgroundImage: `
+    radial-gradient(rgba(255,255,255,0.35) 1px, transparent 1px),
+    radial-gradient(rgba(0,0,0,0.35) 1px, transparent 1px)
+  `,
+    backgroundSize: '3px 3px, 4px 4px',
+    backgroundPosition: '0 0, 1px 1px',
+  },
   /* ── Ticker */
   ticker: {
     overflow: 'hidden',
@@ -964,12 +1014,21 @@ const s = {
   brandStatement: {
     marginLeft: '-2.5rem',
     marginRight: '-2.5rem',
-    background: 'linear-gradient(180deg, rgba(26,20,16,0.97), rgba(10,8,6,1))',
-    color: 'rgba(247,244,239,0.9)',
-    padding: '5rem 2.5rem',
+    position: 'relative',
+    padding: '7rem 2.5rem',
     marginBottom: 0,
+    backgroundImage: `url(${brandBg})`,
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+    backgroundAttachment: 'fixed',
+
+    backgroundBlendMode: 'overlay',
+    backgroundRepeat: 'no-repeat',
+    color: 'rgba(247,244,239,0.92)',
   },
   brandStatementInner: {
+    position: 'relative',
+    zIndex: 2,
     maxWidth: 680,
     margin: '0 auto',
     textAlign: 'center',
@@ -983,6 +1042,7 @@ const s = {
     letterSpacing: '0.32em',
     textTransform: 'uppercase',
     color: 'rgba(184,149,106,0.85)',
+    textShadow: '0 1px 1px rgb(255, 255, 255)',
     fontWeight: 400,
   },
   brandStatementQuote: {
@@ -991,7 +1051,7 @@ const s = {
     fontWeight: 300,
     fontStyle: 'normal',
     lineHeight: 1.25,
-    color: 'rgba(247,244,239,0.92)',
+    color: 'rgba(184,149,106,0.85)',
     margin: 0,
     letterSpacing: '-0.01em',
   },
@@ -1004,9 +1064,20 @@ const s = {
     fontSize: '0.98rem',
     fontWeight: 300,
     lineHeight: 1.85,
-    color: 'rgba(247,244,239,0.52)',
+    color: 'rgba(184,149,106,0.85)',
+    textShadow: '0 1px 1px rgba(255, 255, 255, 0.46)',
     maxWidth: '56ch',
     margin: 0,
+    marginBottom: '15px'
+  },
+
+  brandPanel: {
+    padding: '2.25rem 2.25rem',
+    borderRadius: 6,
+    background: 'rgba(0,0,0,0.22)',
+    border: 'none',
+    backdropFilter: 'blur(5px)',
+    boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
   },
 
   /* ── Buttons */

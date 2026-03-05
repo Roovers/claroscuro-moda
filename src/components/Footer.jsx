@@ -305,7 +305,7 @@ const s = {
   },
   bottomInner: {
     display: 'flex',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignItems: 'center',
     gap: '1rem',
     flexWrap: 'wrap',
