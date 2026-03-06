@@ -48,7 +48,7 @@ const Carrito = () => {
     if (errorForm) setErrorForm('')
   }
 
-  const onEnviarPedido = async (e) => {
+  const onEnviarPedido = (e) => {
     e.preventDefault()
     if (items.length === 0) return
     const err = validar()
@@ -62,6 +62,12 @@ const Carrito = () => {
         telefono: form.telefono.trim(),
         aclaraciones: form.aclaraciones.trim(),
       })
+
+      if (!url) {
+        setErrorForm('WhatsApp no está configurado. Revisá VITE_WHATSAPP_NUMBER.')
+        return
+      }
+
       window.open(url, '_blank', 'noopener,noreferrer')
     } finally {
       setEnviando(false)

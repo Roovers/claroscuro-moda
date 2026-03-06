@@ -104,54 +104,56 @@ export const CarritoProvider = ({ children }) => {
    * @param {string} datos.telefono
    * @param {string} datos.aclaraciones (opcional)
    */
-  const generarMensajeWhatsApp = (datos = {}) => {
-    const numero = import.meta.env.VITE_WHATSAPP_NUMBER
+const generarMensajeWhatsApp = (datos = {}) => {
+  const numero = String(import.meta.env.VITE_WHATSAPP_NUMBER || '').replace(/\D/g, '')
+  if (!numero) return null
 
-    // Si falta número, devolvemos algo seguro para no romper
-    if (!numero) return '#'
+  const {
+    nombre = '',
+    apellido = '',
+    telefono = '',
+    codigoPostal = '',
+    aclaraciones = '',
+  } = datos
 
-    const nombre = (datos.nombre || '').trim()
-    const apellido = (datos.apellido || '').trim()
-    const codigoPostal = (datos.codigoPostal || '').trim()
-    const telefono = (datos.telefono || '').trim()
-    const aclaraciones = (datos.aclaraciones || '').trim()
+  const itemsCarrito = state.items
 
-    const detalle = state.items
-      .map((item) => {
-        const unit = Number(item.precio || 0)
-        const qty = Number(item.cantidad || 0)
-        const sub = unit * qty
+  const items = itemsCarrito.map((item) => {
+    const qty = item.cantidad ?? 1
+    const nombreProd = item.nombre || item.titulo || 'Producto'
+    const variante = [item.talle, item.color].filter(Boolean).join(' · ')
+    const precio = Number(item.precio ?? 0)
 
-        return (
-          `• ${item.nombre}\n` +
-          `  - Talle: ${item.talle}\n` +
-          `  - Color: ${item.color}\n` +
-          `  - Cantidad: ${qty}\n` +
-          `  - Precio unitario: $${unit.toLocaleString('es-AR')}\n` +
-          `  - Subtotal: $${sub.toLocaleString('es-AR')}`
-        )
-      })
-      .join('\n\n')
+    return `• ${nombreProd}${variante ? ` (${variante})` : ''} x${qty} — $${(precio * qty).toLocaleString('es-AR')}`
+  })
 
-    const bloqueCliente =
-      nombre || apellido || codigoPostal || telefono || aclaraciones
-        ? `*Datos del cliente*\n` +
-          `Nombre: ${nombre || '-'}\n` +
-          `Apellido: ${apellido || '-'}\n` +
-          `Código Postal: ${codigoPostal || '-'}\n` +
-          `Teléfono: ${telefono || '-'}\n` +
-          (aclaraciones ? `Aclaraciones: ${aclaraciones}\n` : '')
-        : ''
+  const subtotal = itemsCarrito.reduce(
+    (acc, i) => acc + Number(i.precio ?? 0) * Number(i.cantidad ?? 1),
+    0
+  )
 
-    const mensaje =
-      `¡Hola! Quiero realizar el siguiente pedido:\n\n` +
-      (bloqueCliente ? `${bloqueCliente}\n` : '') +
-      `*Detalle del pedido*\n\n` +
-      `${detalle}\n\n` +
-      `*Total: $${total.toLocaleString('es-AR')}*`
+  const totalPedido = subtotal
 
-    return `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`
-  }
+  const mensaje =
+`Hola! 👋 Quiero hacer un pedido:
+
+🛍️ *Productos*
+${items.join('\n')}
+
+💰 *Subtotal:* $${subtotal.toLocaleString('es-AR')}
+✅ *Total:* $${totalPedido.toLocaleString('es-AR')}
+
+👤 *Datos del cliente*
+• Nombre: ${nombre} ${apellido}
+• Teléfono: ${telefono || '-'}
+• Código Postal: ${codigoPostal || '-'}
+
+${aclaraciones ? `📝 *Aclaraciones:* ${aclaraciones}` : ''}
+
+Gracias! 🙌`
+
+  return `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`
+}
 
   const value = {
     items: state.items,
