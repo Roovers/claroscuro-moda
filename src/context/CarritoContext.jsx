@@ -117,38 +117,48 @@ const generarMensajeWhatsApp = (datos = {}) => {
   } = datos
 
   const itemsCarrito = state.items
+  if (!itemsCarrito || itemsCarrito.length === 0) return null
 
-  const items = itemsCarrito.map((item) => {
-    const qty = item.cantidad ?? 1
+  const money = (n) => `$${Number(n || 0).toLocaleString('es-AR')}`
+
+  const detalle = itemsCarrito.map((item) => {
     const nombreProd = item.nombre || 'Producto'
-    const variante = [item.talle, item.color].filter(Boolean).join(' · ')
-    const precio = Number(item.precio ?? 0)
+    const talle = item.talle || '-'
+    const color = item.color || '-'
+    const cantidad = Number(item.cantidad ?? 1)
+    const precioUnit = Number(item.precio ?? 0)
+    const subtotal = precioUnit * cantidad
 
-    return `- ${nombreProd}${variante ? ` (${variante})` : ''} x${qty} - $${(precio * qty).toLocaleString('es-AR')}`
-  })
+    return (
+`* ${nombreProd}
+  - Talle: ${talle}
+  - Color: ${color}
+  - Cantidad: ${cantidad}
+  - Precio unitario: ${money(precioUnit)}
+  - Subtotal: ${money(subtotal)}`
+    )
+  }).join('\n\n')
 
-  const subtotal = itemsCarrito.reduce(
+  const total = itemsCarrito.reduce(
     (acc, i) => acc + Number(i.precio ?? 0) * Number(i.cantidad ?? 1),
     0
   )
 
   const mensaje =
-`Hola, quiero hacer un pedido.
+`¡Hola! Quiero realizar el siguiente pedido:
 
-PRODUCTOS
-${items.join('\n')}
+Datos del cliente
+Nombre: ${nombre || '-'}
+Apellido: ${apellido || '-'}
+Código Postal: ${codigoPostal || '-'}
+Teléfono: ${telefono || '-'}
+Aclaraciones: ${aclaraciones ? aclaraciones : '-'}
 
-Subtotal: $${subtotal.toLocaleString('es-AR')}
-Total: $${subtotal.toLocaleString('es-AR')}
+Detalle del pedido
 
-DATOS DEL CLIENTE
-Nombre: ${nombre} ${apellido}
-Teléfono: ${telefono}
-Código Postal: ${codigoPostal}
+${detalle}
 
-${aclaraciones ? `Aclaraciones: ${aclaraciones}` : ''}
-
-Gracias.`
+Total: ${money(total)}`
 
   return `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`
 }
