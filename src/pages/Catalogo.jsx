@@ -146,7 +146,7 @@ const Paginacion = ({ paginaActual, hayAnterior, hayMas, anterior, siguiente, ca
 /* ─────────────────────────────────────────────────────────────────────────── */
 const Catalogo = () => {
   const [params, setParams] = useSearchParams()
-  const categoriaParam = params.get('categoria') || ''
+  const categoriaParam = params.get('categoria')?.trim().toLowerCase() || ''
   const [busqueda, setBusqueda] = useState('')
   const [busquedaDebounced, setBusquedaDebounced] = useState('')
   const [orden, setOrden] = useState('recientes')
@@ -197,10 +197,14 @@ const Catalogo = () => {
     return list
   }, [productos, busquedaDebounced, orden])
 
-  const cambiarCategoria = (value) => {
-    if (!value) { params.delete('categoria'); setParams(params, { replace: true }); return }
-    setParams({ categoria: value }, { replace: true })
-  }
+const cambiarCategoria = (value) => {
+  const next = new URLSearchParams(params)
+
+  if (!value) next.delete('categoria')
+  else next.set('categoria', value.toLowerCase())
+
+  setParams(next, { replace: false })
+}
 
   const limpiar = () => { setBusqueda(''); setBusquedaDebounced(''); setOrden('recientes') }
   const hayFiltros = busqueda.trim() || orden !== 'recientes'
