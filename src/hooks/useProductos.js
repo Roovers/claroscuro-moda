@@ -26,10 +26,17 @@ const COLECCION = 'productos'
 const buildPublicQuery = ({ categoria, destacado, limite } = {}) => {
   const colRef = collection(db, COLECCION)
 
-  const constraints = [where('activo', '==', true), orderBy('creadoEn', 'desc')]
+  // IMPORTANTE: Firestore requiere que los where vayan ANTES del orderBy
+  // y que exista un índice compuesto para combinaciones where + orderBy.
+  // Si usás categoria o destacado, creá el índice en Firebase Console.
+  const constraints = []
 
-  if (categoria) constraints.splice(1, 0, where('categoria', '==', categoria))
-  if (destacado) constraints.splice(1, 0, where('destacado', '==', true))
+  if (categoria) constraints.push(where('categoria', '==', categoria))
+  if (destacado) constraints.push(where('destacado', '==', true))
+
+  constraints.push(where('activo', '==', true))
+  constraints.push(orderBy('creadoEn', 'desc'))
+
   if (typeof limite === 'number' && limite > 0) constraints.push(limit(limite))
 
   return query(colRef, ...constraints)
