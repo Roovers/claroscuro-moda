@@ -1,12 +1,84 @@
 import { useEffect, useMemo, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import { useProductosAdmin } from '../../hooks/useProductos'
+import { useProductosAdminPaginados } from '../../hooks/useProductosPaginados'
 import { CATEGORIAS } from '../../constants/categorias'
+import { collection, query, where, getCountFromServer, doc, updateDoc, deleteDoc, serverTimestamp, getDocs, orderBy } from 'firebase/firestore'
+import { db } from '../../firebase/config'
 import {
   Plus, PencilSimple, Trash, SignOut, MagnifyingGlass,
   CheckCircle, XCircle, Star, Package, Image as ImageIcon, List, X,
 } from '@phosphor-icons/react'
+
+/* ── Hook: contadores globales (3 lecturas totales, sin importar cuántos productos haya) */
+const useStatsGlobales = () => {
+  const [stats, setStats] = useState({ total: null, activos: null, inactivos: null })
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const col = collection(db, 'productos')
+        const [snapTotal, snapActivos] = await Promise.all([
+          getCountFromServer(query(col)),
+          getCountFromServer(query(col, where('activo', '==', true))),
+        ])
+        const total = snapTotal.data().count
+        const activos = snapActivos.data().count
+        setStats({ total, activos, inactivos: total - activos })
+      } catch (err) {
+        console.error('[Firestore] useStatsGlobales error:', err)
+      }
+    }
+    fetchStats()
+  }, [])
+
+  return stats
+}
+
+/* ── Hook: índice liviano de nombres para búsqueda global
+   Trae solo id + nombre + categoria de todos los productos (1 query, ~pocos KB).
+   Se cachea en sessionStorage por 5 minutos para no repetir la query en cada recarga. */
+const INDICE_CACHE_KEY = 'admin_indice_nombres'
+const INDICE_CACHE_TTL = 5 * 60 * 1000 // 5 minutos
+
+const useIndiceNombres = () => {
+  const [indice, setIndice] = useState([])
+  const [cargando, setCargando] = useState(true)
+
+  useEffect(() => {
+    const fetch = async () => {
+      // Intentar desde cache primero
+      try {
+        const raw = sessionStorage.getItem(INDICE_CACHE_KEY)
+        if (raw) {
+          const { data, ts } = JSON.parse(raw)
+          if (Date.now() - ts < INDICE_CACHE_TTL) {
+            setIndice(data)
+            setCargando(false)
+            return
+          }
+        }
+      } catch {}
+
+      // Cache vencido o inexistente — ir a Firestore
+      try {
+        const snap = await getDocs(query(collection(db, 'productos'), orderBy('nombre')))
+        const data = snap.docs.map((d) => ({ id: d.id, nombre: d.data().nombre || '', categoria: d.data().categoria || '' }))
+        setIndice(data)
+        try {
+          sessionStorage.setItem(INDICE_CACHE_KEY, JSON.stringify({ data, ts: Date.now() }))
+        } catch {}
+      } catch (err) {
+        console.error('[Firestore] useIndiceNombres error:', err)
+      } finally {
+        setCargando(false)
+      }
+    }
+    fetch()
+  }, [])
+
+  return { indice, cargando }
+}
 
 /* ── Hook mobile */
 const useIsMobile = (bp = 768) => {
@@ -25,17 +97,52 @@ const Dashboard = () => {
   const isMobile = useIsMobile()
   const { logout, usuario } = useAuth()
   const navigate = useNavigate()
-  const { productos, cargando, eliminarProducto, toggleActivo } = useProductosAdmin()
+  const {
+    productos,
+    cargando,
+    eliminarProducto,
+    toggleActivo,
+    paginaActual,
+    hayMas,
+    hayAnterior,
+    siguiente,
+    anterior,
+    refetch,
+    actualizarEnMemoria,
+    eliminarDeMemoria,
+  } = useProductosAdminPaginados({ pageSize: 15 })
+
+  const statsGlobales = useStatsGlobales()
+  const { indice } = useIndiceNombres()
+
+  const handleToggleActivo = async (id, estadoActual) => {
+    actualizarEnMemoria(id, { activo: !estadoActual })
+    try {
+      await updateDoc(doc(db, 'productos', id), { activo: !estadoActual, actualizadoEn: serverTimestamp() })
+    } catch {
+      actualizarEnMemoria(id, { activo: estadoActual })
+    }
+  }
+
+  const handleEliminarProducto = async (id) => {
+    eliminarDeMemoria(id)
+    try {
+      await deleteDoc(doc(db, 'productos', id))
+    } catch {
+      refetch()
+    }
+  }
 
   const [filtroCategoria, setFiltroCategoria] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('')
   const [busqueda, setBusqueda] = useState('')
+  const [busquedaGlobal, setBusquedaGlobal] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const handleLogout = async () => { await logout(); navigate('/admin/login') }
-  const handleEliminar = async (id) => { await eliminarProducto(id); setConfirmDelete(null) }
-  const limpiarFiltros = () => { setFiltroCategoria(''); setFiltroEstado(''); setBusqueda('') }
+  const handleEliminar = async (id) => { await handleEliminarProducto(id); setConfirmDelete(null) }
+  const limpiarFiltros = () => { setFiltroCategoria(''); setFiltroEstado(''); setBusqueda(''); setBusquedaGlobal('') }
 
   const categoriaLabel = (value) => {
     if (!value) return 'Sin categoría'
@@ -44,6 +151,39 @@ const Dashboard = () => {
     if (value === 'calzado') return 'Calzado'
     return value
   }
+
+  // Resultados de búsqueda global — busca en el índice y trae datos completos de Firestore
+  const [resultadosGlobales, setResultadosGlobales] = useState([])
+  const [cargandoGlobal, setCargandoGlobal] = useState(false)
+
+  useEffect(() => {
+    const q = busquedaGlobal.trim().toLowerCase()
+    if (!q || q.length < 2) { setResultadosGlobales([]); return }
+
+    // IDs que matchean en el índice local (sin costo Firestore)
+    const ids = indice
+      .filter((p) => p.nombre.toLowerCase().includes(q))
+      .slice(0, 10)
+      .map((p) => p.id)
+
+    if (ids.length === 0) { setResultadosGlobales([]); return }
+
+    // Debounce: esperar 300ms antes de consultar Firestore
+    const timer = setTimeout(async () => {
+      setCargandoGlobal(true)
+      try {
+        const { getDocs: gd, query: q2, collection: col, where: wh } = await import('firebase/firestore')
+        const snap = await gd(q2(col(db, 'productos'), wh('__name__', 'in', ids)))
+        setResultadosGlobales(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+      } catch (err) {
+        console.error('[Firestore] búsqueda global error:', err)
+      } finally {
+        setCargandoGlobal(false)
+      }
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [busquedaGlobal, indice])
 
   const productosFiltrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase()
@@ -169,10 +309,10 @@ const Dashboard = () => {
           gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, minmax(0, 1fr))',
         }}>
           {[
-            { label: 'Total', value: stats.total },
-            { label: 'Activos', value: stats.activos, color: '#2e7d32' },
-            { label: 'Inactivos', value: stats.inactivos, color: '#c62828' },
-            { label: 'Destacados', value: stats.destacados, color: '#a05a00' },
+            { label: 'Total productos', value: statsGlobales.total ?? '…' },
+            { label: 'Activos', value: statsGlobales.activos ?? '…', color: '#2e7d32' },
+            { label: 'Inactivos', value: statsGlobales.inactivos ?? '…', color: '#c62828' },
+            { label: 'Destacados (pág.)', value: stats.destacados, color: '#a05a00' },
           ].map(({ label, value, color }) => (
             <div key={label} style={s.statCard}>
               <p style={s.statLabel}>{label}</p>
@@ -181,17 +321,43 @@ const Dashboard = () => {
           ))}
         </div>
 
+        {/* Búsqueda global */}
+        <div style={{ marginBottom: '1rem' }}>
+          <div style={{ ...s.searchWrap, width: '100%', maxWidth: 480 }}>
+            <MagnifyingGlass size={16} weight="bold" style={s.searchIcon} />
+            <input
+              type="text"
+              placeholder="Buscar en todos los productos…"
+              value={busquedaGlobal}
+              onChange={(e) => setBusquedaGlobal(e.target.value)}
+              style={{ ...s.inputBusqueda, width: '100%', paddingRight: busquedaGlobal ? '2rem' : '0.9rem' }}
+              aria-label="Búsqueda global"
+              autoComplete="off"
+            />
+            {busquedaGlobal && (
+              <button type="button" onClick={() => setBusquedaGlobal('')} style={s.searchClearBtn} aria-label="Limpiar">
+                <X size={12} weight="bold" />
+              </button>
+            )}
+          </div>
+          {busquedaGlobal.trim().length >= 2 && (
+            <p style={{ margin: '0.4rem 0 0', fontSize: '0.78rem', color: '#aaa' }}>
+              {cargandoGlobal ? 'Buscando…' : `${resultadosGlobales.length} resultado${resultadosGlobales.length !== 1 ? 's' : ''} en toda la tienda`}
+            </p>
+          )}
+        </div>
+
         {/* Filtros */}
         <div style={{ ...s.filtros, flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'stretch' : 'center' }}>
           <div style={{ ...s.searchWrap, width: isMobile ? '100%' : 'auto' }}>
             <MagnifyingGlass size={16} weight="bold" style={s.searchIcon} />
             <input
               type="text"
-              placeholder="Buscar por nombre..."
+              placeholder="Filtrar en esta página…"
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
-              style={{ ...s.inputBusqueda, width: isMobile ? '100%' : 280 }}
-              aria-label="Buscar por nombre"
+              style={{ ...s.inputBusqueda, width: isMobile ? '100%' : 240 }}
+              aria-label="Filtrar página actual"
             />
           </div>
           <select value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)} style={{ ...s.select, width: isMobile ? '100%' : 'auto' }} aria-label="Filtrar por categoría">
@@ -208,107 +374,133 @@ const Dashboard = () => {
         </div>
 
         {/* Tabla / Cards */}
-        {cargando ? (
-          <div style={s.loading}>Cargando productos...</div>
-        ) : productosFiltrados.length === 0 ? (
-          <div style={s.empty}>
-            <p style={s.emptyTitle}>No hay productos con esos filtros.</p>
-            <p style={s.emptySub}>Probá limpiar filtros o creá un producto nuevo.</p>
-            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-              <button onClick={limpiarFiltros} style={s.btnGhostLg} type="button">Limpiar filtros</button>
-              <button onClick={() => navigate('/admin/nuevo')} style={s.btnPrimaryLg} type="button">Crear producto</button>
+        {(() => {
+          const modoGlobal = busquedaGlobal.trim().length >= 2
+          const lista = modoGlobal ? resultadosGlobales : productosFiltrados
+          const cargandoActual = modoGlobal ? cargandoGlobal : cargando
+
+          if (cargandoActual) return <div style={s.loading}>{modoGlobal ? 'Buscando…' : 'Cargando productos...'}</div>
+
+          if (lista.length === 0) return (
+            <div style={s.empty}>
+              <p style={s.emptyTitle}>{modoGlobal ? 'Sin resultados para esa búsqueda.' : 'No hay productos con esos filtros.'}</p>
+              <p style={s.emptySub}>{modoGlobal ? 'Probá con otra palabra.' : 'Probá limpiar filtros o creá un producto nuevo.'}</p>
+              {!modoGlobal && (
+                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <button onClick={limpiarFiltros} style={s.btnGhostLg} type="button">Limpiar filtros</button>
+                  <button onClick={() => navigate('/admin/nuevo')} style={s.btnPrimaryLg} type="button">Crear producto</button>
+                </div>
+              )}
             </div>
-          </div>
-        ) : isMobile ? (
-          /* ── MOBILE: card list en lugar de tabla */
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            {productosFiltrados.map((p) => (
-              <div key={p.id} style={s.mobileCard}>
-                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
-                  {p.imagenes?.[0] ? (
-                    <img src={p.imagenes[0]} alt={p.nombre} style={s.mobileThumb} loading="lazy" />
-                  ) : (
-                    <div style={s.mobileNoImg}>?</div>
-                  )}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={s.mobileCardName}>{p.nombre || '(Sin nombre)'}</p>
-                    <p style={s.mobileCardCat}>{categoriaLabel(p.categoria)}</p>
-                    <p style={s.mobileCardPrice}>${(p.precio || 0).toLocaleString('es-AR')}</p>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #f0f0f0' }}>
-                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                    <button
-                      onClick={() => toggleActivo(p.id, p.activo)}
-                      style={p.activo ? s.badgeActivo : s.badgeInactivo}
-                      type="button"
-                    >
-                      {p.activo ? <><CheckCircle size={13} weight="fill" style={{ marginRight: 4 }} />Activo</> : <><XCircle size={13} weight="fill" style={{ marginRight: 4 }} />Inactivo</>}
-                    </button>
-                    {p.destacado && (
-                      <span style={s.badgeStar}><Star size={13} weight="fill" style={{ marginRight: 4 }} />Dest.</span>
+          )
+
+          return isMobile ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {lista.map((p) => (
+                <div key={p.id} style={s.mobileCard}>
+                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+                    {p.imagenes?.[0] ? (
+                      <img src={p.imagenes[0]} alt={p.nombre} style={s.mobileThumb} loading="lazy" />
+                    ) : (
+                      <div style={s.mobileNoImg}>?</div>
                     )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={s.mobileCardName}>{p.nombre || '(Sin nombre)'}</p>
+                      <p style={s.mobileCardCat}>{categoriaLabel(p.categoria)}</p>
+                      <p style={s.mobileCardPrice}>${(p.precio || 0).toLocaleString('es-AR')}</p>
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button onClick={() => navigate(`/admin/editar/${p.id}`)} style={s.btnEdit} type="button"><PencilSimple size={16} weight="bold" /></button>
-                    <button onClick={() => setConfirmDelete(p.id)} style={s.btnDelete} type="button"><Trash size={16} weight="bold" /></button>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #f0f0f0' }}>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <button onClick={() => handleToggleActivo(p.id, p.activo)} style={p.activo ? s.badgeActivo : s.badgeInactivo} type="button">
+                        {p.activo ? <><CheckCircle size={13} weight="fill" style={{ marginRight: 4 }} />Activo</> : <><XCircle size={13} weight="fill" style={{ marginRight: 4 }} />Inactivo</>}
+                      </button>
+                      {p.destacado && <span style={s.badgeStar}><Star size={13} weight="fill" style={{ marginRight: 4 }} />Dest.</span>}
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button onClick={() => navigate(`/admin/editar/${p.id}`)} style={s.btnEdit} type="button"><PencilSimple size={16} weight="bold" /></button>
+                      <button onClick={() => setConfirmDelete(p.id)} style={s.btnDelete} type="button"><Trash size={16} weight="bold" /></button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          /* ── DESKTOP: tabla */
-          <div style={s.tableWrapper}>
-            <table style={s.table}>
-              <thead>
-                <tr>
-                  <th style={s.th}>Imagen</th>
-                  <th style={s.th}>Nombre</th>
-                  <th style={s.th}>Categoría</th>
-                  <th style={s.th}>Precio</th>
-                  <th style={s.th}>Destacado</th>
-                  <th style={s.th}>Estado</th>
-                  <th style={s.thRight}>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {productosFiltrados.map((p) => (
-                  <tr key={p.id} style={s.tr}>
-                    <td style={s.td}>
-                      {p.imagenes?.[0] ? (
-                        <img src={p.imagenes[0]} alt={p.nombre} style={s.thumbnail} loading="lazy" />
-                      ) : (
-                        <div style={s.noImage}>Sin imagen</div>
-                      )}
-                    </td>
-                    <td style={s.td}>
-                      <button style={s.linkName} onClick={() => navigate(`/admin/editar/${p.id}`)} type="button">
-                        {p.nombre || '(Sin nombre)'}
-                      </button>
-                    </td>
-                    <td style={s.td}><span style={s.badge}>{categoriaLabel(p.categoria)}</span></td>
-                    <td style={s.td}>${(p.precio || 0).toLocaleString('es-AR')}</td>
-                    <td style={s.td}>
-                      {p.destacado ? <span style={s.badgeStar}><Star size={14} weight="fill" style={{ marginRight: 6 }} />Sí</span> : <span style={s.muted}>—</span>}
-                    </td>
-                    <td style={s.td}>
-                      <button onClick={() => toggleActivo(p.id, p.activo)} style={p.activo ? s.badgeActivo : s.badgeInactivo} type="button">
-                        {p.activo ? <><CheckCircle size={14} weight="fill" style={{ marginRight: 6 }} />Activo</> : <><XCircle size={14} weight="fill" style={{ marginRight: 6 }} />Inactivo</>}
-                      </button>
-                    </td>
-                    <td style={s.tdRight}>
-                      <div style={s.acciones}>
-                        <button onClick={() => navigate(`/admin/editar/${p.id}`)} style={s.btnEdit} type="button"><PencilSimple size={16} weight="bold" /></button>
-                        <button onClick={() => setConfirmDelete(p.id)} style={s.btnDelete} type="button"><Trash size={16} weight="bold" /></button>
-                      </div>
-                    </td>
+              ))}
+            </div>
+          ) : (
+            <div style={s.tableWrapper}>
+              <table style={s.table}>
+                <thead>
+                  <tr>
+                    <th style={s.th}>Imagen</th>
+                    <th style={s.th}>Nombre</th>
+                    <th style={s.th}>Categoría</th>
+                    <th style={s.th}>Precio</th>
+                    <th style={s.th}>Destacado</th>
+                    <th style={s.th}>Estado</th>
+                    <th style={s.thRight}>Acciones</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {lista.map((p) => (
+                    <tr key={p.id} style={s.tr}>
+                      <td style={s.td}>
+                        {p.imagenes?.[0] ? (
+                          <img src={p.imagenes[0]} alt={p.nombre} style={s.thumbnail} loading="lazy" />
+                        ) : (
+                          <div style={s.noImage}>Sin imagen</div>
+                        )}
+                      </td>
+                      <td style={s.td}>
+                        <button style={s.linkName} onClick={() => navigate(`/admin/editar/${p.id}`)} type="button">
+                          {p.nombre || '(Sin nombre)'}
+                        </button>
+                      </td>
+                      <td style={s.td}><span style={s.badge}>{categoriaLabel(p.categoria)}</span></td>
+                      <td style={s.td}>${(p.precio || 0).toLocaleString('es-AR')}</td>
+                      <td style={s.td}>
+                        {p.destacado ? <span style={s.badgeStar}><Star size={14} weight="fill" style={{ marginRight: 6 }} />Sí</span> : <span style={s.muted}>—</span>}
+                      </td>
+                      <td style={s.td}>
+                        <button onClick={() => handleToggleActivo(p.id, p.activo)} style={p.activo ? s.badgeActivo : s.badgeInactivo} type="button">
+                          {p.activo ? <><CheckCircle size={14} weight="fill" style={{ marginRight: 6 }} />Activo</> : <><XCircle size={14} weight="fill" style={{ marginRight: 6 }} />Inactivo</>}
+                        </button>
+                      </td>
+                      <td style={s.tdRight}>
+                        <div style={s.acciones}>
+                          <button onClick={() => navigate(`/admin/editar/${p.id}`)} style={s.btnEdit} type="button"><PencilSimple size={16} weight="bold" /></button>
+                          <button onClick={() => setConfirmDelete(p.id)} style={s.btnDelete} type="button"><Trash size={16} weight="bold" /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        })()}
+
+        {/* Paginación — se oculta durante búsqueda global */}
+        {!busquedaGlobal.trim() && (hayAnterior || hayMas) && !busqueda.trim() && !filtroCategoria && !filtroEstado && (
+          <div style={s.pagination}>
+            <button
+              type="button"
+              onClick={anterior}
+              disabled={!hayAnterior || cargando}
+              style={{ ...s.pageBtn, ...(!hayAnterior || cargando ? s.pageBtnDisabled : {}) }}
+            >
+              ← Anterior
+            </button>
+            <span style={s.pageNum}>Página {paginaActual + 1}</span>
+            <button
+              type="button"
+              onClick={siguiente}
+              disabled={!hayMas || cargando}
+              style={{ ...s.pageBtn, ...(!hayMas || cargando ? s.pageBtnDisabled : {}) }}
+            >
+              Siguiente →
+            </button>
           </div>
         )}
+
       </main>
 
       {/* Modal delete */}
@@ -368,6 +560,7 @@ const s = {
   searchWrap: { position: 'relative', display: 'flex', alignItems: 'center' },
   searchIcon: { position: 'absolute', left: 12, color: '#888' },
   inputBusqueda: { padding: '0.65rem 0.9rem 0.65rem 2.25rem', border: '1px solid #ddd', borderRadius: '10px', fontSize: '0.9rem', background: '#fff', outline: 'none' },
+  searchClearBtn: { position: 'absolute', right: 10, background: 'none', border: 'none', color: '#aaa', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0.2rem' },
   select: { padding: '0.65rem 0.9rem', border: '1px solid #ddd', borderRadius: '10px', fontSize: '0.9rem', background: '#fff', outline: 'none', cursor: 'pointer' },
   btnGhost: { background: 'transparent', border: '1px solid #ddd', padding: '0.62rem 0.9rem', borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem' },
 
@@ -407,6 +600,11 @@ const s = {
   emptySub: { margin: '0.5rem 0 1.25rem', fontSize: '0.92rem', color: '#666', lineHeight: 1.5 },
   btnGhostLg: { background: 'transparent', border: '1px solid #ddd', padding: '0.75rem 1.1rem', borderRadius: '12px', cursor: 'pointer', fontSize: '0.9rem' },
   btnPrimaryLg: { background: '#1a1a1a', color: '#fff', border: 'none', padding: '0.75rem 1.1rem', borderRadius: '12px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 700 },
+
+  pagination: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid #f0f0f0' },
+  pageBtn: { padding: '0.6rem 1.1rem', border: '1px solid #ddd', borderRadius: '8px', background: '#fff', color: '#1a1a1a', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' },
+  pageBtnDisabled: { opacity: 0.35, cursor: 'not-allowed' },
+  pageNum: { fontSize: '0.82rem', color: '#888', fontWeight: 600 },
 
   overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' },
   modal: { background: '#fff', padding: '1.5rem', borderRadius: '14px', minWidth: '280px', maxWidth: '420px', width: '100%', boxShadow: '0 18px 50px rgba(0,0,0,0.22)' },

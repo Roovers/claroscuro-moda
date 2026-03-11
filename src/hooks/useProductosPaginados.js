@@ -85,6 +85,7 @@ export const cloudinaryThumb = (url, width = 480) => {
 export const useProductosPaginados = ({ categoria = '', pageSize = 12 } = {}) => {
   const [paginas, setPaginas] = useState([]) // array de arrays (una por página)
   const [cursores, setCursores] = useState([]) // último doc de cada página (para startAfter)
+  const [hayMasPorPagina, setHayMasPorPagina] = useState([]) // hayMas de cada página
   const [paginaActual, setPaginaActual] = useState(0)
   const [hayMas, setHayMas] = useState(true)
   const [cargando, setCargando] = useState(false)
@@ -102,6 +103,7 @@ export const useProductosPaginados = ({ categoria = '', pageSize = 12 } = {}) =>
   useEffect(() => {
     setPaginas([])
     setCursores([])
+    setHayMasPorPagina([])
     setPaginaActual(0)
     setHayMas(true)
     setError(null)
@@ -112,6 +114,8 @@ export const useProductosPaginados = ({ categoria = '', pageSize = 12 } = {}) =>
       // Si ya tenemos esa página en memoria, la usamos directamente
       if (paginas[numeroPagina]) {
         setPaginaActual(numeroPagina)
+        // Restaurar hayMas correcto para esta página
+        setHayMas(hayMasPorPagina[numeroPagina] ?? true)
         return
       }
 
@@ -184,6 +188,11 @@ export const useProductosPaginados = ({ categoria = '', pageSize = 12 } = {}) =>
           next[numeroPagina] = lastVisible
           return next
         })
+        setHayMasPorPagina((prev) => {
+          const next = [...prev]
+          next[numeroPagina] = masResultados
+          return next
+        })
         setHayMas(masResultados)
         setPaginaActual(numeroPagina)
 
@@ -197,7 +206,7 @@ export const useProductosPaginados = ({ categoria = '', pageSize = 12 } = {}) =>
         if (mountedRef.current) setCargando(false)
       }
     },
-    [categoria, pageSize, paginas, cursores, cachePrefix]
+    [categoria, pageSize, paginas, cursores, hayMasPorPagina, cachePrefix]
   )
 
   // Cargar primera página al montar o al cambiar categoría
@@ -250,6 +259,7 @@ export const useProductosPaginados = ({ categoria = '', pageSize = 12 } = {}) =>
 export const useProductosAdminPaginados = ({ pageSize = 15 } = {}) => {
   const [paginas, setPaginas] = useState([])
   const [cursores, setCursores] = useState([])
+  const [hayMasPorPagina, setHayMasPorPagina] = useState([])
   const [paginaActual, setPaginaActual] = useState(0)
   const [hayMas, setHayMas] = useState(true)
   const [cargando, setCargando] = useState(false)
@@ -265,6 +275,7 @@ export const useProductosAdminPaginados = ({ pageSize = 15 } = {}) => {
     async (numeroPagina) => {
       if (paginas[numeroPagina]) {
         setPaginaActual(numeroPagina)
+        setHayMas(hayMasPorPagina[numeroPagina] ?? true)
         return
       }
 
@@ -304,6 +315,11 @@ export const useProductosAdminPaginados = ({ pageSize = 15 } = {}) => {
           next[numeroPagina] = lastVisible
           return next
         })
+        setHayMasPorPagina((prev) => {
+          const next = [...prev]
+          next[numeroPagina] = tieneExtra
+          return next
+        })
         setHayMas(tieneExtra)
         setPaginaActual(numeroPagina)
       } catch (err) {
@@ -314,7 +330,7 @@ export const useProductosAdminPaginados = ({ pageSize = 15 } = {}) => {
         if (mountedRef.current) setCargando(false)
       }
     },
-    [paginas, cursores, pageSize]
+    [paginas, cursores, hayMasPorPagina, pageSize]
   )
 
   useEffect(() => {
