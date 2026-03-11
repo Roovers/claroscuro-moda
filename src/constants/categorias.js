@@ -1,11 +1,14 @@
 export const CATEGORIAS = [
   { value: 'remeras', label: 'Remeras' },
+  { value: 'camisas', label: 'Camisas' },
   { value: 'pantalones', label: 'Pantalones' },
+  { value: 'jeans', label: 'Jeans' },
+  { value: 'faldas', label: 'Faldas' },
   { value: 'vestidos', label: 'Vestidos' },
   { value: 'sweaters', label: 'Sweaters / Buzos' },
   { value: 'sacos', label: 'Sacos / Abrigos' },
 
-  // ✅ NUEVO: Calzado oficial (para filtros + navbar + chips)
+  // ✅ Calzado oficial (para filtros + navbar + chips)
   { value: 'calzado', label: 'Calzado' },
 
   { value: 'accesorios', label: 'Accesorios' },
@@ -19,8 +22,11 @@ export const TALLES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'Único']
 // ✅ Alias por si querés usarlo más explícito
 export const TALLES_PRENDAS = TALLES
 
-// ✅ NUEVO: Talles calzado (string para que coincida con lo que guardamos/mostramos)
+// ✅ Talles calzado (string para que coincida con lo que guardamos/mostramos)
 export const TALLES_CALZADO = ['35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45']
+
+// ✅ NUEVO: Talles jeans (del 36 al 44)
+export const TALLES_JEANS = ['36', '37', '38', '39', '40', '41', '42', '43', '44']
 
 export const COLORES_PRESET = [
   { nombre: 'Negro', hex: '#1a1a1a' },

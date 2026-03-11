@@ -27,6 +27,7 @@ const useIsMobile = (bp = 768) => {
 }
 
 const TALLES_CALZADO = ['35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45']
+const TALLES_JEANS = ['36', '37', '38', '39', '40', '41', '42', '43', '44']
 
 const INITIAL_FORM = {
   nombre: '', descripcion: '', precio: '', categoria: '',
@@ -79,7 +80,8 @@ const ProductoForm = () => {
   }, [])
 
   const esCalzado = form.categoria === 'calzado'
-  const tallesDisponibles = esCalzado ? TALLES_CALZADO : TALLES
+  const esJeans = form.categoria === 'jeans'
+  const tallesDisponibles = esCalzado ? TALLES_CALZADO : esJeans ? TALLES_JEANS : TALLES
 
   useEffect(() => {
     if (!esEdicion) return
