@@ -331,7 +331,7 @@ const Home = () => {
           </div>
         ) : (destacados || []).length === 0 ? (
           <div style={s.emptyNote}>
-            <p style={s.emptyNoteText}>Marcá productos como "destacado" desde el panel admin para que aparezcan aquí.</p>
+            <p style={s.emptyNoteText}>Todavía no hay productos destacados, quedate atento porque estan por llegar.</p>
           </div>
         ) : (
           <div style={s.sliderWrap}>

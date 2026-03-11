@@ -120,7 +120,7 @@ const Footer = () => {
         <div style={s.bottomInner}>
           <p style={s.copy}>© {year} claroscuro. Todos los derechos reservados.</p>
           <div style={s.bottomRight}>
-            <span style={s.bottomTag}>Hecho con cuidado · Argentina</span>
+            <span style={s.bottomTag}>Hecho por RooversTech</span>
           </div>
         </div>
       </div>
