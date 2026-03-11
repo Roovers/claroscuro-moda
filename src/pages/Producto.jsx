@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { ShoppingBag, ArrowLeft, Check, Minus, Plus, WarningCircle, ArrowRight } from '@phosphor-icons/react'
 import { useProducto } from '../hooks/useProductos'
+import { cloudinaryThumb } from '../hooks/useProductosPaginados'
 import { useCarrito } from '../context/CarritoContext'
 import { CATEGORIAS } from '../constants/categorias'
 
@@ -127,7 +128,7 @@ const Producto = () => {
           <div style={s.mainImgWrap}>
             {producto.imagenes?.[imgActiva] ? (
               <img
-                src={producto.imagenes[imgActiva]}
+                src={cloudinaryThumb(producto.imagenes[imgActiva], 900)}
                 alt={producto.nombre}
                 style={s.mainImg}
                 key={imgActiva}
@@ -161,7 +162,7 @@ const Producto = () => {
                   }}
                   aria-label={`Imagen ${i + 1}`}
                 >
-                  <img src={url} alt="" style={s.thumbImg} />
+                  <img src={cloudinaryThumb(url, 120)} alt="" style={s.thumbImg} />
                 </button>
               ))}
             </div>
