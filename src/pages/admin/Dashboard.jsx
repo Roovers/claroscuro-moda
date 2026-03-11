@@ -312,7 +312,7 @@ const Dashboard = () => {
             { label: 'Total productos', value: statsGlobales.total ?? '…' },
             { label: 'Activos', value: statsGlobales.activos ?? '…', color: '#2e7d32' },
             { label: 'Inactivos', value: statsGlobales.inactivos ?? '…', color: '#c62828' },
-            { label: 'Destacados (pág.)', value: stats.destacados, color: '#a05a00' },
+            { label: 'Destacados', value: stats.destacados, color: '#a05a00' },
           ].map(({ label, value, color }) => (
             <div key={label} style={s.statCard}>
               <p style={s.statLabel}>{label}</p>
