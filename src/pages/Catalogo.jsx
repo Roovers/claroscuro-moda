@@ -76,7 +76,7 @@ const ProductCard = ({ p, index = 0 }) => {
         <div style={sc.cardImgWrap}>
           {p.imagenes?.[0] ? (
             <img
-              src={cloudinaryThumb(p.imagenes[0], 480)}
+              src={p.imagenes[0]}
               alt={p.nombre}
               style={{
                 ...sc.cardImg,
@@ -137,9 +137,16 @@ const Catalogo = () => {
   const isMd = useMediaQuery('(max-width: 980px)')
   const isSm = useMediaQuery('(max-width: 560px)')
 
-  const { productos, cargando, error } = useProductos({
-    categoria: categoriaParam || undefined,
-  })
+  const {
+    productos,
+    cargando,
+    error,
+    paginaActual,
+    hayMas,
+    hayAnterior,
+    siguiente,
+    anterior,
+  } = useProductosPaginados({ categoria: categoriaParam || '', pageSize: 12 })
 
   useEffect(() => { setBusqueda('') }, [categoriaParam])
 
@@ -157,9 +164,10 @@ const Catalogo = () => {
     if (orden === 'precio-asc') list.sort((a, b) => Number(a.precio || 0) - Number(b.precio || 0))
     else if (orden === 'precio-desc') list.sort((a, b) => Number(b.precio || 0) - Number(a.precio || 0))
     else if (orden === 'az') list.sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es'))
-    else list.sort((a, b) => (b.creadoEn?.seconds || 0) - (a.creadoEn?.seconds || 0))
     return list
   }, [productos, busqueda, orden])
+
+  const hayFiltros = busqueda.trim() || orden !== 'recientes'
 
   const cambiarCategoria = (value) => {
     if (!value) { params.delete('categoria'); setParams(params, { replace: true }); return }
@@ -169,7 +177,6 @@ const Catalogo = () => {
   const limpiar = () => { setBusqueda(''); setOrden('recientes') }
 
   const gridCols = isSm ? '1fr' : isMd ? 'repeat(2, minmax(0,1fr))' : 'repeat(3, minmax(0,1fr))'
-  const hayFiltros = busqueda.trim() || orden !== 'recientes'
 
   return (
     <main style={{ ...s.page, padding: isSm ? '0 1.25rem 5rem' : s.page.padding }}>
@@ -340,6 +347,29 @@ const Catalogo = () => {
           {productosProcesados.map((p, i) => (
             <ProductCard key={p.id} p={p} index={i} />
           ))}
+        </div>
+      )}
+
+      {/* Paginación — solo cuando no hay búsqueda activa */}
+      {!busqueda.trim() && (hayAnterior || hayMas) && (
+        <div style={s.pagination}>
+          <button
+            type="button"
+            onClick={anterior}
+            disabled={!hayAnterior || cargando}
+            style={{ ...s.pageBtn, ...(!hayAnterior || cargando ? s.pageBtnDisabled : {}) }}
+          >
+            ← Anterior
+          </button>
+          <span style={s.pageNum}>Página {paginaActual + 1}</span>
+          <button
+            type="button"
+            onClick={siguiente}
+            disabled={!hayMas || cargando}
+            style={{ ...s.pageBtn, ...(!hayMas || cargando ? s.pageBtnDisabled : {}) }}
+          >
+            Siguiente →
+          </button>
         </div>
       )}
 
@@ -793,6 +823,41 @@ const s = {
     flexWrap: 'wrap',
     justifyContent: 'center',
     marginTop: '0.5rem',
+  },
+
+  /* ── Paginación */
+  pagination: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '1.5rem',
+    marginTop: '3rem',
+    paddingTop: '2rem',
+    borderTop: '1px solid var(--border)',
+  },
+  pageBtn: {
+    padding: '0.65rem 1.35rem',
+    border: '1px solid var(--border-strong)',
+    borderRadius: 2,
+    background: 'transparent',
+    color: 'var(--ink)',
+    fontSize: '0.78rem',
+    letterSpacing: '0.1em',
+    textTransform: 'uppercase',
+    cursor: 'pointer',
+    fontFamily: 'var(--font-body)',
+    fontWeight: 400,
+  },
+  pageBtnDisabled: {
+    opacity: 0.3,
+    cursor: 'not-allowed',
+  },
+  pageNum: {
+    fontSize: '0.72rem',
+    letterSpacing: '0.2em',
+    textTransform: 'uppercase',
+    color: 'var(--ink-3)',
+    fontWeight: 400,
   },
 
   /* ── Buttons */
