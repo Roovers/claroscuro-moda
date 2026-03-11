@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import { useProductosAdmin } from '../../hooks/useProductos'
+import { useProductosAdminPaginados } from '../../hooks/useProductosPaginados'
 import { CATEGORIAS } from '../../constants/categorias'
 import {
   Plus, PencilSimple, Trash, SignOut, MagnifyingGlass,
@@ -25,7 +25,44 @@ const Dashboard = () => {
   const isMobile = useIsMobile()
   const { logout, usuario } = useAuth()
   const navigate = useNavigate()
-  const { productos, cargando, eliminarProducto, toggleActivo } = useProductosAdmin()
+  const {
+    productos,
+    cargando,
+    eliminarProducto,
+    toggleActivo,
+    paginaActual,
+    hayMas,
+    hayAnterior,
+    siguiente,
+    anterior,
+    refetch,
+    actualizarEnMemoria,
+    eliminarDeMemoria,
+  } = useProductosAdminPaginados({ pageSize: 15 })
+
+  const handleToggleActivo = async (id, estadoActual) => {
+    // Actualiza en memoria de inmediato (optimistic UI)
+    actualizarEnMemoria(id, { activo: !estadoActual })
+    try {
+      const { doc, updateDoc, serverTimestamp } = await import('firebase/firestore')
+      const { db } = await import('../../firebase/config')
+      await updateDoc(doc(db, 'productos', id), { activo: !estadoActual, actualizadoEn: serverTimestamp() })
+    } catch {
+      // Revertir si falla
+      actualizarEnMemoria(id, { activo: estadoActual })
+    }
+  }
+
+  const handleEliminarProducto = async (id) => {
+    eliminarDeMemoria(id)
+    try {
+      const { doc, deleteDoc } = await import('firebase/firestore')
+      const { db } = await import('../../firebase/config')
+      await deleteDoc(doc(db, 'productos', id))
+    } catch {
+      refetch()
+    }
+  }
 
   const [filtroCategoria, setFiltroCategoria] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('')
@@ -34,7 +71,7 @@ const Dashboard = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const handleLogout = async () => { await logout(); navigate('/admin/login') }
-  const handleEliminar = async (id) => { await eliminarProducto(id); setConfirmDelete(null) }
+  const handleEliminar = async (id) => { await handleEliminarProducto(id); setConfirmDelete(null) }
   const limpiarFiltros = () => { setFiltroCategoria(''); setFiltroEstado(''); setBusqueda('') }
 
   const categoriaLabel = (value) => {
@@ -169,7 +206,7 @@ const Dashboard = () => {
           gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, minmax(0, 1fr))',
         }}>
           {[
-            { label: 'Total', value: stats.total },
+            { label: 'En esta página', value: stats.total },
             { label: 'Activos', value: stats.activos, color: '#2e7d32' },
             { label: 'Inactivos', value: stats.inactivos, color: '#c62828' },
             { label: 'Destacados', value: stats.destacados, color: '#a05a00' },
@@ -239,7 +276,7 @@ const Dashboard = () => {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #f0f0f0' }}>
                   <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                     <button
-                      onClick={() => toggleActivo(p.id, p.activo)}
+                      onClick={() => handleToggleActivo(p.id, p.activo)}
                       style={p.activo ? s.badgeActivo : s.badgeInactivo}
                       type="button"
                     >
@@ -293,7 +330,7 @@ const Dashboard = () => {
                       {p.destacado ? <span style={s.badgeStar}><Star size={14} weight="fill" style={{ marginRight: 6 }} />Sí</span> : <span style={s.muted}>—</span>}
                     </td>
                     <td style={s.td}>
-                      <button onClick={() => toggleActivo(p.id, p.activo)} style={p.activo ? s.badgeActivo : s.badgeInactivo} type="button">
+                      <button onClick={() => handleToggleActivo(p.id, p.activo)} style={p.activo ? s.badgeActivo : s.badgeInactivo} type="button">
                         {p.activo ? <><CheckCircle size={14} weight="fill" style={{ marginRight: 6 }} />Activo</> : <><XCircle size={14} weight="fill" style={{ marginRight: 6 }} />Inactivo</>}
                       </button>
                     </td>
@@ -309,6 +346,30 @@ const Dashboard = () => {
             </table>
           </div>
         )}
+
+        {/* Paginación */}
+        {(hayAnterior || hayMas) && !busqueda.trim() && !filtroCategoria && !filtroEstado && (
+          <div style={s.pagination}>
+            <button
+              type="button"
+              onClick={anterior}
+              disabled={!hayAnterior || cargando}
+              style={{ ...s.pageBtn, ...(!hayAnterior || cargando ? s.pageBtnDisabled : {}) }}
+            >
+              ← Anterior
+            </button>
+            <span style={s.pageNum}>Página {paginaActual + 1}</span>
+            <button
+              type="button"
+              onClick={siguiente}
+              disabled={!hayMas || cargando}
+              style={{ ...s.pageBtn, ...(!hayMas || cargando ? s.pageBtnDisabled : {}) }}
+            >
+              Siguiente →
+            </button>
+          </div>
+        )}
+
       </main>
 
       {/* Modal delete */}
@@ -407,6 +468,11 @@ const s = {
   emptySub: { margin: '0.5rem 0 1.25rem', fontSize: '0.92rem', color: '#666', lineHeight: 1.5 },
   btnGhostLg: { background: 'transparent', border: '1px solid #ddd', padding: '0.75rem 1.1rem', borderRadius: '12px', cursor: 'pointer', fontSize: '0.9rem' },
   btnPrimaryLg: { background: '#1a1a1a', color: '#fff', border: 'none', padding: '0.75rem 1.1rem', borderRadius: '12px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 700 },
+
+  pagination: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid #f0f0f0' },
+  pageBtn: { padding: '0.6rem 1.1rem', border: '1px solid #ddd', borderRadius: '8px', background: '#fff', color: '#1a1a1a', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' },
+  pageBtnDisabled: { opacity: 0.35, cursor: 'not-allowed' },
+  pageNum: { fontSize: '0.82rem', color: '#888', fontWeight: 600 },
 
   overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' },
   modal: { background: '#fff', padding: '1.5rem', borderRadius: '14px', minWidth: '280px', maxWidth: '420px', width: '100%', boxShadow: '0 18px 50px rgba(0,0,0,0.22)' },
