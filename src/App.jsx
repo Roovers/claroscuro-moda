@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './context/AuthContext'
+import ScrollToTop from './components/ScrollToTop' 
 
 // Layout público
 import Navbar from './components/Navbar'
@@ -39,6 +40,7 @@ const PublicLayout = ({ children }) => (
 const App = () => {
   return (
     <>
+    <ScrollToTop />
       <Routes>
         {/* TIENDA PÚBLICA (con layout) */}
         <Route
