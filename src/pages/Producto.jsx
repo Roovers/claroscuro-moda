@@ -96,24 +96,37 @@ const Producto = () => {
   return (
     <main style={s.root}>
 
-      {/* ── Breadcrumb */}
-      <div style={s.breadcrumb} className="anim-fade-up">
-        <button type="button" onClick={() => navigate(-1)} style={s.backBtn}>
-          <ArrowLeft size={12} weight="bold" style={{ marginRight: 6 }} />
-          Volver
-        </button>
-        <span style={s.breadSep}>·</span>
-        <Link to="/catalogo" style={s.breadLink}>Catálogo</Link>
-        {categoriaLabel && (
-          <>
-            <span style={s.breadSep}>·</span>
-            <Link to={`/catalogo?categoria=${producto.categoria}`} style={s.breadLink}>
-              {categoriaLabel}
-            </Link>
-          </>
-        )}
-        <span style={s.breadSep}>·</span>
-        <span style={s.breadCurrent}>{producto.nombre}</span>
+      {/* ══════════════════════════════════════════════════════════
+          BARRA DE NAVEGACIÓN SUPERIOR — PROBLEMA 3 FIX
+          Reemplaza el breadcrumb sutil por una barra más visible
+          con un botón "← Volver al catálogo" prominente.
+      ══════════════════════════════════════════════════════════ */}
+      <div style={s.navBar} className="anim-fade-up">
+
+        {/* Botón principal: volver al catálogo con categoría activa */}
+        <Link
+          to={producto.categoria ? `/catalogo?categoria=${producto.categoria}` : '/catalogo'}
+          style={s.backToCatalog}
+        >
+          <ArrowLeft size={14} weight="bold" style={{ marginRight: 8, flexShrink: 0 }} />
+          Volver al catálogo
+        </Link>
+
+        {/* Breadcrumb secundario: solo en desktop */}
+        <div style={s.breadcrumb}>
+          <Link to="/catalogo" style={s.breadLink}>Catálogo</Link>
+          {categoriaLabel && (
+            <>
+              <span style={s.breadSep}>·</span>
+              <Link to={`/catalogo?categoria=${producto.categoria}`} style={s.breadLink}>
+                {categoriaLabel}
+              </Link>
+            </>
+          )}
+          <span style={s.breadSep}>·</span>
+          <span style={s.breadCurrent}>{producto.nombre}</span>
+        </div>
+
       </div>
 
       {/* ── Layout */}
@@ -137,7 +150,6 @@ const Producto = () => {
               <div style={s.mainImgFallback} />
             )}
 
-            {/* Corner marks — mismo detalle decorativo que el hero */}
             <div style={{ ...s.corner, top: 14, left: 14 }} />
             <div style={{ ...s.corner, top: 14, right: 14, transform: 'rotate(90deg)' }} />
             <div style={{ ...s.corner, bottom: 14, left: 14, transform: 'rotate(-90deg)' }} />
@@ -382,27 +394,45 @@ const s = {
   errorSub: { color: 'var(--ink-3)', fontSize: '0.95rem', fontWeight: 300, lineHeight: 1.75, margin: 0 },
   errorActions: { display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap', marginTop: '0.5rem' },
 
-  /* ── Breadcrumb */
+  /* ── Barra de navegación superior (FIX Problema 3) */
+  navBar: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '1rem',
+    padding: '1.25rem 2.5rem',
+    maxWidth: 1100,
+    margin: '0 auto',
+    borderBottom: '1px solid var(--border)',
+    flexWrap: 'wrap',
+  },
+
+  /* Botón prominente "← Volver al catálogo" */
+  backToCatalog: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '0.6rem 1.1rem',
+    border: '1px solid var(--border-strong)',
+    borderRadius: 2,
+    background: 'rgba(255,255,255,0.7)',
+    color: 'var(--ink)',
+    fontSize: '0.75rem',
+    letterSpacing: '0.1em',
+    textTransform: 'uppercase',
+    fontWeight: 400,
+    textDecoration: 'none',
+    fontFamily: 'var(--font-body)',
+    transition: 'background 0.2s ease, border-color 0.2s ease',
+    backdropFilter: 'blur(6px)',
+    flexShrink: 0,
+  },
+
+  /* Breadcrumb secundario — visible solo en desktop */
   breadcrumb: {
     display: 'flex',
     alignItems: 'center',
     flexWrap: 'wrap',
-    gap: '0.5rem',
-    padding: '1.5rem 2.5rem 0',
-    maxWidth: 1100,
-    margin: '0 auto',
-  },
-  backBtn: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    fontSize: '0.72rem',
-    letterSpacing: '0.1em',
-    color: 'var(--ink-3)',
-    fontFamily: 'var(--font-body)',
-    padding: 0,
+    gap: '0.45rem',
   },
   breadSep: { color: 'var(--border-strong)', fontSize: '0.7rem' },
   breadLink: {
@@ -416,6 +446,10 @@ const s = {
     letterSpacing: '0.1em',
     color: 'var(--ink)',
     fontWeight: 400,
+    maxWidth: '28ch',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   },
 
   /* ── Layout */
@@ -740,10 +774,13 @@ const s = {
   },
 }
 
-/* ── Responsive mínimo */
+/* ── Responsive */
 if (typeof window !== 'undefined' && window.matchMedia) {
   if (window.matchMedia('(max-width: 560px)').matches) {
-    s.breadcrumb.padding = '1.25rem 1.25rem 0'
+    s.navBar.padding = '1rem 1.25rem'
+    s.navBar.borderBottom = '1px solid var(--border)'
+    // En mobile: ocultar breadcrumb secundario, solo mostrar el botón
+    s.breadcrumb.display = 'none'
     s.layout.padding = '1.5rem 1.25rem 5rem'
     s.layout.gap = '2.5rem'
   }
