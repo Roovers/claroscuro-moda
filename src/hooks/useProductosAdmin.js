@@ -113,6 +113,7 @@ export const useProductosAdmin = ({ pageSize = 15 } = {}) => {
       if (filtroCategoria && p.categoria !== filtroCategoria) return false
       if (filtroEstado === 'activos' && p.activo !== true) return false
       if (filtroEstado === 'inactivos' && p.activo !== false) return false
+      if (filtroEstado === 'destacados' && p.destacado !== true) return false
       if (q && !(p.nombre || '').toLowerCase().includes(q)) return false
       return true
     })

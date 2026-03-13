@@ -327,6 +327,7 @@ const Dashboard = () => {
                     { value: '', label: 'Todos' },
                     { value: 'activos', label: 'Activos' },
                     { value: 'inactivos', label: 'Inactivos' },
+                    { value: 'destacados', label: 'Destacados' }, 
                   ].map((o) => (
                     <button
                       key={o.value}
@@ -584,8 +585,8 @@ const s = {
   filtroPanelGroup: { display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1, minWidth: 0 },
   filtroPanelLabel: { fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#999', margin: 0 },
   chipsRow: { display: 'flex', flexWrap: 'wrap', gap: '0.4rem' },
-  chip: { padding: '0.32rem 0.75rem', border: '1px solid #e0e0e0', borderRadius: '999px', background: 'transparent', fontSize: '0.78rem', color: '#555', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' },
-  chipActive: { background: '#1a1a1a', color: '#fff', borderColor: '#1a1a1a' },
+  chip: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box', padding: '0.32rem 0.75rem', minHeight: '32px', border: '1px solid #e0e0e0', borderRadius: '999px', background: '#fff', color: '#555', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.78rem', lineHeight: 1, appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none', outline: 'none', boxShadow: 'none', transition: 'background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease' },
+  chipActive: { background: '#1a1a1a', color: '#fff', border: '1px solid #1a1a1a' },
 
   // Result bar
   resultBar: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', gap: '0.5rem', flexWrap: 'wrap' },
