@@ -574,9 +574,9 @@ const s = {
   // Search + filters
   searchWrap: { position: 'relative', display: 'inline-flex', alignItems: 'center' },
   searchIcon: { position: 'absolute', left: 12, color: '#888', pointerEvents: 'none' },
-  inputBusqueda: { padding: '0.65rem 0.9rem 0.65rem 2.25rem', border: '1px solid #ddd', borderRadius: '10px', fontSize: '0.88rem', background: '#fff', outline: 'none', fontFamily: 'inherit' },
+  inputBusqueda: { padding: '0.65rem 0.9rem 0.65rem 2.25rem', border: '1px solid #ddd', borderRadius: '10px', fontSize: '0.88rem', background: '#fff', outline: 'none', fontFamily: 'inherit', color: '#1a1a1a', WebkitAppearance: 'none', },
   searchClearBtn: { position: 'absolute', right: 10, background: 'none', border: 'none', color: '#aaa', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0.2rem' },
-  btnGhost: { background: 'transparent', border: '1px solid #ddd', padding: '0.62rem 0.9rem', borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem', fontFamily: 'inherit' },
+  btnGhost: { background: 'transparent', border: '1px solid #ddd', padding: '0.62rem 0.9rem', borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem', fontFamily: 'inherit', color: '#1a1a1a', WebkitAppearance: 'none', },
   filtrosBadge: { background: '#1a1a1a', color: '#fff', borderRadius: '999px', fontSize: '0.68rem', fontWeight: 700, padding: '0.1rem 0.45rem', lineHeight: 1.4 },
 
   // Filter panel
