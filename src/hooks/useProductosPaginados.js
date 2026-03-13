@@ -1,11 +1,29 @@
 /**
- * useProductosPaginados.js
+ * useProductosPaginados.js — CORREGIDO
  * ─────────────────────────────────────────────────────────────────
- * Hook de paginación cursor-based para Firestore.
- * Exporta:
- *   - useProductosPaginados({ categoria, pageSize })  → catálogo público
- *   - useProductosAdminPaginados({ pageSize })         → panel admin
- *   - cloudinaryThumb(url, width)                      → helper Cloudinary
+ *
+ * FIXES aplicados:
+ *
+ * 1. BUG PRINCIPAL — Stale closure en fetchPagina:
+ *    Antes había DOS useEffect separados (reset + fetch). Cuando `categoria`
+ *    cambiaba, el efecto de fetch llamaba fetchPagina(0) con el `paginas` viejo
+ *    en su closure (el setPaginas([]) del efecto de reset aún no había procesado).
+ *    Resultado: fetchPagina veía paginas[0] con datos viejos → retornaba temprano
+ *    → los productos de la categoría anterior seguían en pantalla.
+ *
+ *    SOLUCIÓN: Usar useRef para que fetchPagina lea siempre el valor fresco de
+ *    paginas/cursores sin depender del closure. Se asignan directo en el render
+ *    body (sin useEffect). Los deps de useCallback se reducen a [categoria, pageSize].
+ *    Un único useEffect resetea los refs inmediatamente y llama fetchPagina(0).
+ *
+ * 2. BUG SECUNDARIO — Cache sessionStorage corrompía cursores de Firestore:
+ *    lastVisible es un DocumentSnapshot de Firestore. Al serializarse con
+ *    JSON.stringify pierde todos sus métodos prototype. Al restaurarlo y pasarlo
+ *    a startAfter(), Firestore recibía un objeto plano inválido → página 2+ fallaba.
+ *
+ *    SOLUCIÓN: Se eliminó el sessionStorage cache. El cache en memoria (array
+ *    paginas[]) es suficiente y funciona correctamente con DocumentSnapshots.
+ *
  * ─────────────────────────────────────────────────────────────────
  */
 
@@ -21,124 +39,70 @@ import {
 } from 'firebase/firestore'
 import { db } from '../firebase/config'
 
-// ── Configuración ────────────────────────────────────────────────
 const COLECCION = 'productos'
-const SESSION_TTL = 3 * 60 * 1000 // 3 minutos en ms
-
-// ── Cache en sessionStorage ──────────────────────────────────────
-const cacheGet = (key) => {
-  try {
-    const raw = sessionStorage.getItem(key)
-    if (!raw) return null
-    const { data, ts } = JSON.parse(raw)
-    if (Date.now() - ts > SESSION_TTL) {
-      sessionStorage.removeItem(key)
-      return null
-    }
-    return data
-  } catch {
-    return null
-  }
-}
-
-const cacheSet = (key, data) => {
-  try {
-    sessionStorage.setItem(key, JSON.stringify({ data, ts: Date.now() }))
-  } catch {
-    // sessionStorage lleno o bloqueado → ignorar silenciosamente
-  }
-}
-
-const cacheInvalidate = (prefix) => {
-  try {
-    Object.keys(sessionStorage)
-      .filter((k) => k.startsWith(prefix))
-      .forEach((k) => sessionStorage.removeItem(k))
-  } catch {}
-}
 
 // ── Helper Cloudinary ────────────────────────────────────────────
 /**
  * Transforma una URL de Cloudinary para servir una versión thumbnail optimizada.
  * @param {string} url   - URL original de Cloudinary
  * @param {number} width - Ancho deseado (default: 480)
- * @returns {string} URL con transformación aplicada
- *
- * Resultado: ~80% menos bytes, WebP automático en browsers modernos.
  */
 export const cloudinaryThumb = (url, width = 480) => {
   if (!url || !url.includes('cloudinary.com')) return url
-  // Reemplaza /upload/ por /upload/w_{width},c_fill,f_auto,q_auto/
   return url.replace('/upload/', `/upload/w_${width},c_fill,f_auto,q_auto/`)
 }
 
 // ── Hook Público: catálogo ───────────────────────────────────────
 /**
  * Paginación cursor-based para el catálogo público.
- * Solo lee los documentos de la página actual.
- * Volver a una página anterior NO genera nuevas lecturas (cache en memoria).
+ * Cache en memoria: volver a una página anterior no genera nuevas lecturas.
  *
  * @param {Object}  options
  * @param {string}  options.categoria  - Filtrar por categoría (opcional)
  * @param {number}  options.pageSize   - Productos por página (default: 12)
  */
 export const useProductosPaginados = ({ categoria = '', pageSize = 12 } = {}) => {
-  const [paginas, setPaginas] = useState([]) // array de arrays (una por página)
-  const [cursores, setCursores] = useState([]) // último doc de cada página (para startAfter)
-  const [hayMasPorPagina, setHayMasPorPagina] = useState([]) // hayMas de cada página
+  const [paginas, setPaginas] = useState([])           // cache en memoria por página
+  const [cursores, setCursores] = useState([])         // DocumentSnapshot de último doc
+  const [hayMasPorPagina, setHayMasPorPagina] = useState([])
   const [paginaActual, setPaginaActual] = useState(0)
   const [hayMas, setHayMas] = useState(true)
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState(null)
 
-  const cachePrefix = `cat_${categoria || 'all'}_`
   const mountedRef = useRef(true)
-
   useEffect(() => {
     mountedRef.current = true
     return () => { mountedRef.current = false }
   }, [])
 
-  // Reset cuando cambia la categoría
-  useEffect(() => {
-    setPaginas([])
-    setCursores([])
-    setHayMasPorPagina([])
-    setPaginaActual(0)
-    setHayMas(true)
-    setError(null)
-  }, [categoria])
+  // ── Refs para evitar stale closures ──────────────────────────
+  // Se asignan directo en render body → siempre tienen el valor más reciente
+  // sin necesidad de useEffect (que correría demasiado tarde).
+  const paginasRef         = useRef(paginas)
+  const cursoresRef        = useRef(cursores)
+  const hayMasPorPaginaRef = useRef(hayMasPorPagina)
+  paginasRef.current         = paginas
+  cursoresRef.current        = cursores
+  hayMasPorPaginaRef.current = hayMasPorPagina
 
+  // ── fetchPagina ──────────────────────────────────────────────
+  // deps SOLO [categoria, pageSize]: los refs manejan paginas/cursores sin stale closure.
+  // La identidad de esta función cambia únicamente cuando categoria o pageSize cambian.
   const fetchPagina = useCallback(
     async (numeroPagina) => {
-      // Si ya tenemos esa página en memoria, la usamos directamente
-      if (paginas[numeroPagina]) {
+      // Leer desde refs → siempre frescos, nunca stale
+      const _paginas         = paginasRef.current
+      const _cursores        = cursoresRef.current
+      const _hayMasPorPagina = hayMasPorPaginaRef.current
+
+      // Cache hit en memoria
+      if (_paginas[numeroPagina]) {
         setPaginaActual(numeroPagina)
-        // Restaurar hayMas correcto para esta página
-        setHayMas(hayMasPorPagina[numeroPagina] ?? true)
+        setHayMas(_hayMasPorPagina[numeroPagina] ?? true)
         return
       }
 
-      // Intentar desde cache sessionStorage
-      const cacheKey = `${cachePrefix}p${numeroPagina}`
-      const cached = cacheGet(cacheKey)
-      if (cached) {
-        setPaginas((prev) => {
-          const next = [...prev]
-          next[numeroPagina] = cached.productos
-          return next
-        })
-        setCursores((prev) => {
-          const next = [...prev]
-          next[numeroPagina] = cached.lastVisible
-          return next
-        })
-        setHayMas(cached.hayMas)
-        setPaginaActual(numeroPagina)
-        return
-      }
-
-      // Construir query
       setCargando(true)
       setError(null)
 
@@ -146,22 +110,18 @@ export const useProductosPaginados = ({ categoria = '', pageSize = 12 } = {}) =>
         const constraints = [
           where('activo', '==', true),
           orderBy('creadoEn', 'desc'),
-          limit(pageSize + 1), // pedimos 1 extra para saber si hay más
+          limit(pageSize + 1), // +1 para saber si hay más
         ]
 
+        // El where de categoria debe ir ANTES del orderBy en Firestore
         if (categoria) {
           constraints.splice(1, 0, where('categoria', '==', categoria))
         }
 
-        // Si no es la primera página, necesitamos el cursor de la página anterior
+        // Cursor para páginas 2, 3, …
         if (numeroPagina > 0) {
-          const cursorAnterior = cursores[numeroPagina - 1]
-          if (!cursorAnterior) {
-            // No tenemos cursor, hay que cargar desde el principio en cadena
-            // (esto no debería pasar en flujo normal)
-            setCargando(false)
-            return
-          }
+          const cursorAnterior = _cursores[numeroPagina - 1]
+          if (!cursorAnterior) { setCargando(false); return }
           constraints.push(startAfter(cursorAnterior))
         }
 
@@ -170,34 +130,26 @@ export const useProductosPaginados = ({ categoria = '', pageSize = 12 } = {}) =>
 
         if (!mountedRef.current) return
 
-        const docs = snapshot.docs
-        const tieneExtra = docs.length > pageSize
-        const docsPagina = tieneExtra ? docs.slice(0, pageSize) : docs
-        const productos = docsPagina.map((d) => ({ id: d.id, ...d.data() }))
+        const docs        = snapshot.docs
+        const tieneExtra  = docs.length > pageSize
+        const docsPagina  = tieneExtra ? docs.slice(0, pageSize) : docs
+        const productos   = docsPagina.map((d) => ({ id: d.id, ...d.data() }))
         const lastVisible = docsPagina[docsPagina.length - 1] || null
-        const masResultados = tieneExtra
 
-        // Guardar en memoria
+        // Actualizar estado con functional updates (sin depender de closures)
         setPaginas((prev) => {
-          const next = [...prev]
-          next[numeroPagina] = productos
-          return next
+          const next = [...prev]; next[numeroPagina] = productos; return next
         })
         setCursores((prev) => {
-          const next = [...prev]
-          next[numeroPagina] = lastVisible
-          return next
+          // lastVisible es un DocumentSnapshot → se guarda en memoria, NO en sessionStorage
+          const next = [...prev]; next[numeroPagina] = lastVisible; return next
         })
         setHayMasPorPagina((prev) => {
-          const next = [...prev]
-          next[numeroPagina] = masResultados
-          return next
+          const next = [...prev]; next[numeroPagina] = tieneExtra; return next
         })
-        setHayMas(masResultados)
+        setHayMas(tieneExtra)
         setPaginaActual(numeroPagina)
 
-        // Guardar en sessionStorage
-        cacheSet(cacheKey, { productos, lastVisible, hayMas: masResultados })
       } catch (err) {
         if (!mountedRef.current) return
         console.error('[Firestore] useProductosPaginados error:', err)
@@ -206,15 +158,32 @@ export const useProductosPaginados = ({ categoria = '', pageSize = 12 } = {}) =>
         if (mountedRef.current) setCargando(false)
       }
     },
-    [categoria, pageSize, paginas, cursores, hayMasPorPagina, cachePrefix]
+    [categoria, pageSize] // ← SOLO estos dos. Refs manejan el resto.
   )
 
-  // Cargar primera página al montar o al cambiar categoría
+  // ── Efecto ÚNICO: reset + fetch cuando cambia categoria o pageSize ──
+  // fetchPagina cambia de identidad solo cuando categoria/pageSize cambian,
+  // por eso el dep array es [fetchPagina] y el efecto corre exactamente cuando se necesita.
   useEffect(() => {
-    fetchPagina(0)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categoria, pageSize])
+    // 1. Resetear estado
+    setPaginas([])
+    setCursores([])
+    setHayMasPorPagina([])
+    setPaginaActual(0)
+    setHayMas(true)
+    setError(null)
 
+    // 2. CRÍTICO: resetear refs AHORA (antes de llamar fetchPagina)
+    //    para que fetchPagina vea paginas/cursores vacíos y no retorne temprano.
+    paginasRef.current         = []
+    cursoresRef.current        = []
+    hayMasPorPaginaRef.current = []
+
+    // 3. Fetch fresco
+    fetchPagina(0)
+  }, [fetchPagina])
+
+  // ── Navegación ───────────────────────────────────────────────
   const siguiente = () => {
     if (!hayMas || cargando) return
     fetchPagina(paginaActual + 1)
@@ -225,13 +194,27 @@ export const useProductosPaginados = ({ categoria = '', pageSize = 12 } = {}) =>
     fetchPagina(paginaActual - 1)
   }
 
-  // Invalida cache (llamar después de crear/editar/eliminar)
+  // ── Invalidar cache (llamar después de crear/editar/eliminar) ─
   const invalidarCache = () => {
-    cacheInvalidate(cachePrefix)
     setPaginas([])
     setCursores([])
+    setHayMasPorPagina([])
+    paginasRef.current         = []
+    cursoresRef.current        = []
+    hayMasPorPaginaRef.current = []
     setPaginaActual(0)
     setHayMas(true)
+    fetchPagina(0)
+  }
+
+  // ── Refetch página actual ─────────────────────────────────────
+  const refetch = () => {
+    // Borrar la página actual del cache en memoria
+    const newPaginas = [...paginasRef.current]
+    newPaginas[paginaActual] = undefined
+    paginasRef.current = newPaginas
+    setPaginas(newPaginas)
+    fetchPagina(paginaActual)
   }
 
   return {
@@ -244,7 +227,7 @@ export const useProductosPaginados = ({ categoria = '', pageSize = 12 } = {}) =>
     siguiente,
     anterior,
     invalidarCache,
-    refetch: () => fetchPagina(paginaActual),
+    refetch,
   }
 }
 
@@ -252,6 +235,7 @@ export const useProductosPaginados = ({ categoria = '', pageSize = 12 } = {}) =>
 /**
  * Paginación cursor-based para el panel de administración.
  * Carga TODOS los productos (activos e inactivos).
+ * Aplica el mismo fix de refs para consistencia.
  *
  * @param {Object} options
  * @param {number} options.pageSize - Productos por página (default: 15)
@@ -271,11 +255,23 @@ export const useProductosAdminPaginados = ({ pageSize = 15 } = {}) => {
     return () => { mountedRef.current = false }
   }, [])
 
+  // Refs para evitar stale closures
+  const paginasRef         = useRef(paginas)
+  const cursoresRef        = useRef(cursores)
+  const hayMasPorPaginaRef = useRef(hayMasPorPagina)
+  paginasRef.current         = paginas
+  cursoresRef.current        = cursores
+  hayMasPorPaginaRef.current = hayMasPorPagina
+
   const fetchPagina = useCallback(
     async (numeroPagina) => {
-      if (paginas[numeroPagina]) {
+      const _paginas         = paginasRef.current
+      const _cursores        = cursoresRef.current
+      const _hayMasPorPagina = hayMasPorPaginaRef.current
+
+      if (_paginas[numeroPagina]) {
         setPaginaActual(numeroPagina)
-        setHayMas(hayMasPorPagina[numeroPagina] ?? true)
+        setHayMas(_hayMasPorPagina[numeroPagina] ?? true)
         return
       }
 
@@ -289,7 +285,7 @@ export const useProductosAdminPaginados = ({ pageSize = 15 } = {}) => {
         ]
 
         if (numeroPagina > 0) {
-          const cursorAnterior = cursores[numeroPagina - 1]
+          const cursorAnterior = _cursores[numeroPagina - 1]
           if (!cursorAnterior) { setCargando(false); return }
           constraints.push(startAfter(cursorAnterior))
         }
@@ -299,29 +295,24 @@ export const useProductosAdminPaginados = ({ pageSize = 15 } = {}) => {
 
         if (!mountedRef.current) return
 
-        const docs = snapshot.docs
-        const tieneExtra = docs.length > pageSize
-        const docsPagina = tieneExtra ? docs.slice(0, pageSize) : docs
-        const productos = docsPagina.map((d) => ({ id: d.id, ...d.data() }))
+        const docs        = snapshot.docs
+        const tieneExtra  = docs.length > pageSize
+        const docsPagina  = tieneExtra ? docs.slice(0, pageSize) : docs
+        const productos   = docsPagina.map((d) => ({ id: d.id, ...d.data() }))
         const lastVisible = docsPagina[docsPagina.length - 1] || null
 
         setPaginas((prev) => {
-          const next = [...prev]
-          next[numeroPagina] = productos
-          return next
+          const next = [...prev]; next[numeroPagina] = productos; return next
         })
         setCursores((prev) => {
-          const next = [...prev]
-          next[numeroPagina] = lastVisible
-          return next
+          const next = [...prev]; next[numeroPagina] = lastVisible; return next
         })
         setHayMasPorPagina((prev) => {
-          const next = [...prev]
-          next[numeroPagina] = tieneExtra
-          return next
+          const next = [...prev]; next[numeroPagina] = tieneExtra; return next
         })
         setHayMas(tieneExtra)
         setPaginaActual(numeroPagina)
+
       } catch (err) {
         if (!mountedRef.current) return
         console.error('[Firestore] useProductosAdminPaginados error:', err)
@@ -330,40 +321,34 @@ export const useProductosAdminPaginados = ({ pageSize = 15 } = {}) => {
         if (mountedRef.current) setCargando(false)
       }
     },
-    [paginas, cursores, hayMasPorPagina, pageSize]
+    [pageSize]
   )
 
   useEffect(() => {
     fetchPagina(0)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [fetchPagina])
 
   const siguiente = () => { if (!hayMas || cargando) return; fetchPagina(paginaActual + 1) }
-  const anterior = () => { if (paginaActual === 0 || cargando) return; fetchPagina(paginaActual - 1) }
+  const anterior  = () => { if (paginaActual === 0 || cargando) return; fetchPagina(paginaActual - 1) }
 
-  // Fuerza recarga de la página actual limpiando cache en memoria
   const refetch = () => {
-    setPaginas((prev) => {
-      const next = [...prev]
-      next[paginaActual] = undefined
-      return next
-    })
-    // Pequeño trick: forzar el fetch eliminando la entrada actual
+    const newPaginas = [...paginasRef.current]
+    newPaginas[paginaActual] = undefined
+    paginasRef.current = newPaginas
+    setPaginas(newPaginas)
     fetchPagina(paginaActual)
   }
 
-  // Actualizar un producto en memoria sin refetch (toggle activo, etc.)
+  // Actualizar un producto en memoria sin re-fetch (toggle activo, etc.)
   const actualizarEnMemoria = (id, cambios) => {
     setPaginas((prev) =>
       prev.map((pagina) =>
-        pagina
-          ? pagina.map((p) => (p.id === id ? { ...p, ...cambios } : p))
-          : pagina
+        pagina ? pagina.map((p) => (p.id === id ? { ...p, ...cambios } : p)) : pagina
       )
     )
   }
 
-  // Eliminar un producto en memoria sin refetch
+  // Eliminar un producto en memoria sin re-fetch
   const eliminarDeMemoria = (id) => {
     setPaginas((prev) =>
       prev.map((pagina) =>
